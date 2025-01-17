@@ -55,7 +55,8 @@ export default class Database {
             };
 
             request.onerror = (event: Event): void => {
-                reject();
+                // not too worried if it doesn't save, it'll redownload later
+                resolve();
             };
         });
     }

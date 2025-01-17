@@ -641,8 +641,7 @@ export class Client extends GameShell {
         }
         try {
             await this.db?.cachesave(name + '.mid', data);
-            const length: number = new Packet(Uint8Array.from(data)).g4;
-            const uncompressed = BZip2.decompress(data, length, true, true);
+            const uncompressed = BZip2.decompress(data, -1, false, true);
             playMidi(uncompressed, this.midiVolume, fade);
         } catch (e) {
             /* empty */
@@ -1431,7 +1430,12 @@ export class Client extends GameShell {
         try {
             await this.showProgress(10, 'Connecting to fileserver');
 
-            this.db = new Database(await Database.openDatabase());
+            try {
+                this.db = new Database(await Database.openDatabase());
+            } catch (err) {
+                // possibly incognito mode
+                this.db = null;
+            }
 
             const checksums: Packet = new Packet(new Uint8Array(await downloadUrl(`${Client.httpAddress}/crc`)));
             for (let i: number = 0; i < 9; i++) {
@@ -6411,10 +6415,11 @@ export class Client extends GameShell {
                 // MIDI_JINGLE
                 if (this.midiActive && !Client.lowMemory) {
                     const delay: number = this.in.g2;
-                    const length: number = this.in.g4;
-                    const remaining: number = this.packetSize - 6;
-                    // const uncompressed = BZip2.decompress(this.in.data.subarray(this.in.pos, remaining), length, true, true);
-                    // playMidi(uncompressed, this.midiVolume, false);
+
+                    const data = this.in.data.subarray(this.in.pos, this.packetSize);
+                    const uncompressed = BZip2.decompress(data, -1, false, true);
+
+                    playMidi(uncompressed, this.midiVolume, false);
                     this.nextMusicDelay = delay;
                 }
                 this.packetType = -1;
@@ -7004,8 +7009,7 @@ export class Client extends GameShell {
                     const src: Uint8Array | null = this.sceneMapLandData[i];
 
                     if (src) {
-                        const length: number = new Packet(src).g4;
-                        const data = BZip2.decompress(src, length, true, true);
+                        const data = BZip2.decompress(src, -1, false, true);
                         world.readLandscape((this.sceneCenterZoneX - 6) * 8, (this.sceneCenterZoneZ - 6) * 8, x, z, data);
                     } else if (this.sceneCenterZoneZ < 800) {
                         world.clearLandscape(z, x, 64, 64);
@@ -7019,8 +7023,7 @@ export class Client extends GameShell {
                 for (let i: number = 0; i < maps; i++) {
                     const src: Uint8Array | null = this.sceneMapLocData[i];
                     if (src) {
-                        const length: number = new Packet(src).g4;
-                        const data = BZip2.decompress(src, length, true, true);
+                        const data = BZip2.decompress(src, -1, false, true);
                         const x: number = (this.sceneMapIndex[i] >> 8) * 64 - this.sceneBaseTileX;
                         const z: number = (this.sceneMapIndex[i] & 0xff) * 64 - this.sceneBaseTileZ;
                         world.readLocs(this.scene, this.locList, this.levelCollisionMap, data, x, z);
