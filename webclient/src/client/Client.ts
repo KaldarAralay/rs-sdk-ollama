@@ -166,6 +166,7 @@ export class Client extends GameShell {
     protected errorStarted: boolean = false;
     protected errorLoading: boolean = false;
     protected errorHost: boolean = false;
+    protected errorMessage: string | null = null;
 
     // important client stuff
     protected db: Database | null = null;
@@ -574,7 +575,7 @@ export class Client extends GameShell {
             process.env.SECURE_ORIGIN !== "false" &&
             window.location.hostname !== process.env.SECURE_ORIGIN
         ) {
-            return;
+            this.errorHost = true;
         }
 
         this.run();
@@ -658,30 +659,34 @@ export class Client extends GameShell {
     };
 
     protected setMidi = async (name: string, crc: number, length: number, fade: boolean): Promise<void> => {
-        let data: Uint8Array | undefined = await this.db?.cacheload(name + '.mid');
-        if (data && crc !== 12345678 && Packet.crc32(data) !== crc) {
-            data = undefined;
-        }
+        try {
+            let data: Uint8Array | undefined = await this.db?.cacheload(name + '.mid');
+            if (data && crc !== 12345678 && Packet.crc32(data) !== crc) {
+                data = undefined;
+            }
 
-        if (!data || !data.length) {
-            try {
-                data = await downloadUrl(`/${name}_${crc}.mid`);
-                if (length !== data.length) {
-                    data = data.slice(0, length);
+            if (!data || !data.length) {
+                try {
+                    data = await downloadUrl(`/${name}_${crc}.mid`);
+                    if (length !== data.length) {
+                        data = data.slice(0, length);
+                    }
+                } catch (e) {
+                    /* empty */
                 }
+            }
+
+            if (!data) {
+                return;
+            }
+
+            try {
+                await this.db?.cachesave(name + '.mid', data);
+                const uncompressed = BZip2.decompress(data, -1, false, true);
+                playMidi(uncompressed, this.midiVolume, fade);
             } catch (e) {
                 /* empty */
             }
-        }
-
-        if (!data) {
-            return;
-        }
-
-        try {
-            await this.db?.cachesave(name + '.mid', data);
-            const uncompressed = BZip2.decompress(data, -1, false, true);
-            playMidi(uncompressed, this.midiVolume, fade);
         } catch (e) {
             /* empty */
         }
@@ -693,14 +698,14 @@ export class Client extends GameShell {
 
         this.setFramerate(1);
 
-        if (this.errorLoading) {
-            this.flameActive = false;
+        this.flameActive = false;
+        let y: number = 35;
 
+        if (this.errorLoading) {
             canvas2d.font = 'bold 16px helvetica, sans-serif';
             canvas2d.textAlign = 'left';
             canvas2d.fillStyle = 'yellow';
 
-            let y: number = 35;
             canvas2d.fillText('Sorry, an error has occured whilst loading RuneScape', 30, y);
 
             y += 50;
@@ -712,21 +717,14 @@ export class Client extends GameShell {
             canvas2d.fillText('1: Try closing ALL open web-browser windows, and reloading', 30, y);
 
             y += 30;
-            canvas2d.fillText('2: Try clearing your web-browsers cache from tools->internet options', 30, y);
+            canvas2d.fillText('2: Try clearing your web-browsers cache', 30, y);
 
             y += 30;
             canvas2d.fillText('3: Try using a different game-world', 30, y);
 
             y += 30;
             canvas2d.fillText('4: Try rebooting your computer', 30, y);
-
-            y += 30;
-            canvas2d.fillText('5: Try selecting a different version of Java from the play-game menu', 30, y);
-        }
-
-        if (this.errorHost) {
-            this.flameActive = false;
-
+        } else if (this.errorHost) {
             canvas2d.font = 'bold 20px helvetica, sans-serif';
             canvas2d.textAlign = 'left';
             canvas2d.fillStyle = 'white';
@@ -734,16 +732,11 @@ export class Client extends GameShell {
             canvas2d.fillText('Error - unable to load game!', 50, 50);
             canvas2d.fillText('To play RuneScape make sure you play from', 50, 100);
             canvas2d.fillText('an approved domain', 50, 150);
-        }
-
-        if (this.errorStarted) {
-            this.flameActive = false;
-
+        } else if (this.errorStarted) {
             canvas2d.font = 'bold 13px helvetica, sans-serif';
             canvas2d.textAlign = 'left';
             canvas2d.fillStyle = 'yellow';
 
-            let y: number = 35;
             canvas2d.fillText('Error a copy of RuneScape already appears to be loaded', 30, y);
 
             y += 50;
@@ -756,6 +749,12 @@ export class Client extends GameShell {
 
             y += 30;
             canvas2d.fillText('2: Try rebooting your computer, and reloading', 30, y);
+        }
+
+        if (this.errorMessage) {
+            y += 50;
+            canvas2d.fillStyle = 'red';
+            canvas2d.fillText('Error: ' + this.errorMessage, 30, y);
         }
     };
 
@@ -1718,8 +1717,12 @@ export class Client extends GameShell {
             WordFilter.unpack(wordenc);
             this.initializeLevelExperience();
         } catch (err) {
-            console.error(err);
             this.errorLoading = true;
+
+            console.error(err);
+            if (err instanceof Error) {
+                this.errorMessage = err.message;
+            }
         }
     }
 
