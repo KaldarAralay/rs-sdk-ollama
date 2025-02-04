@@ -1,7 +1,7 @@
 import fs from 'fs';
 
 import obfuscator from 'javascript-obfuscator';
-import uglify from 'uglify-js';
+import { minify } from 'terser';
 
 const define = {
     'process.env.SECURE_ORIGIN': JSON.stringify(process.env.SECURE_ORIGIN ?? 'false'),
@@ -35,8 +35,8 @@ async function prodBuild(entry) {
     };
 }
 
-// uglify-js
-async function uglifyProdBuild(entry) {
+// terser
+async function minifyProdBuild(entry) {
     const build = await Bun.build({
         entrypoints: [entry],
         sourcemap: 'external',
@@ -53,35 +53,24 @@ async function uglifyProdBuild(entry) {
     const source = await build.outputs[0].text();
     const sourcemap = await build.outputs[0].sourcemap.text();
 
-    const ugly = uglify.minify(source, {
-        compress: {
-            module: true,
-            unsafe: true,
-            toplevel: true
-        },
-        mangle: {
-            reserved: [
-                // entry point
-                'Client'
-            ],
-            eval: true,
-            toplevel: true,
-            properties: true
-        },
+    const mini = await minify(source, {
         sourceMap: {
             content: sourcemap
         },
-        toplevel: true
+        toplevel: true,
+        mangle: {
+            properties: {
+                reserved: [
+                    'decompress', // deps
+                    'willReadFrequently', // canvas
+                ]
+            }
+        }
     });
 
-    if (ugly.error) {
-        console.error(ugly.error.message);
-        process.exit(1);
-    }
-
     return {
-        source: ugly.code,
-        sourcemap: ugly.map
+        source: mini.code,
+        sourcemap: mini.map
     };
 }
 
@@ -159,6 +148,7 @@ async function depsBuild(entry) {
     const build = await Bun.build({
         entrypoints: [entry],
         sourcemap: 'external',
+        minify: true,
         define
     });
 
@@ -170,24 +160,9 @@ async function depsBuild(entry) {
     const source = await build.outputs[0].text();
     const sourcemap = await build.outputs[0].sourcemap.text();
 
-    const ugly = uglify.minify(source, {
-        compress: {
-            module: true
-        },
-        sourceMap: {
-            content: sourcemap
-        },
-        toplevel: true
-    });
-
-    if (ugly.error) {
-        console.error(ugly.error.message);
-        process.exit(1);
-    }
-
     return {
-        source: ugly.code,
-        sourcemap: ugly.map
+        source,
+        sourcemap
     };
 }
 
@@ -205,7 +180,8 @@ const args = process.argv.slice(2);
 let build = devBuild;
 if (args[0] === 'prod') {
     if (args[1] === 'uglify') {
-        build = uglifyProdBuild;
+        // todo: rename
+        build = minifyProdBuild;
     } else if (args[1] === 'obfuscate') {
         build = obfuscatorProdBuild;
     } else {
