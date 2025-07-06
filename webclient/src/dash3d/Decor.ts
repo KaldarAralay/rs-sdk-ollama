@@ -1,11 +1,11 @@
-import ModelSource from '#/dash3d/Model.js';
+import ModelSource from '#/dash3d/ModelSource.js';
 
 export default class Decor {
     readonly y: number;
     x: number;
     z: number;
-    readonly decorType: number;
-    readonly decorAngle: number;
+    readonly angle1: number;
+    readonly angle2: number;
     model: ModelSource;
     readonly typecode: number;
     readonly info: number; // byte
@@ -14,8 +14,8 @@ export default class Decor {
         this.y = y;
         this.x = x;
         this.z = z;
-        this.decorType = type;
-        this.decorAngle = angle;
+        this.angle1 = type;
+        this.angle2 = angle;
         this.model = model;
         this.typecode = typecode;
         this.info = info;

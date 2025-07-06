@@ -1,6 +1,5 @@
 import SpotAnimType from '#/config/SpotAnimType.js';
 
-import Model from '#/dash3d/Model.js';
 import ModelSource from '#/dash3d/ModelSource.ts';
 
 export default class MapSpotAnim extends ModelSource {
@@ -18,6 +17,7 @@ export default class MapSpotAnim extends ModelSource {
 
     constructor(id: number, level: number, x: number, z: number, y: number, cycle: number, delay: number) {
         super();
+
         this.spotType = SpotAnimType.types[id];
         this.spotLevel = level;
         this.x = x;
@@ -40,36 +40,5 @@ export default class MapSpotAnim extends ModelSource {
                 this.seqComplete = true;
             }
         }
-    }
-
-    draw(): Model {
-        const tmp: Model = this.spotType.getModel();
-        const model: Model = Model.modelShareColored(tmp, true, !this.spotType.animHasAlpha, false);
-        if (!this.seqComplete && this.spotType.seq && this.spotType.seq.frames) {
-            model.createLabelReferences();
-            model.applyTransform(this.spotType.seq.frames[this.seqFrame]);
-            model.labelFaces = null;
-            model.labelVertices = null;
-        }
-
-        if (this.spotType.resizeh !== 128 || this.spotType.resizev !== 128) {
-            model.scale(this.spotType.resizeh, this.spotType.resizev, this.spotType.resizeh);
-        }
-
-        if (this.spotType.angle !== 0) {
-            if (this.spotType.angle === 90) {
-                model.rotateY90();
-            } else if (this.spotType.angle === 180) {
-                model.rotateY90();
-                model.rotateY90();
-            } else if (this.spotType.angle === 270) {
-                model.rotateY90();
-                model.rotateY90();
-                model.rotateY90();
-            }
-        }
-
-        model.calculateNormals(64 + this.spotType.ambient, 850 + this.spotType.contrast, -30, -50, -30, true);
-        return model;
     }
 }

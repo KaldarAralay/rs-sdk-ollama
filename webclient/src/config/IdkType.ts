@@ -55,20 +55,20 @@ export default class IdkType extends ConfigType {
         }
     }
 
-    validateModel(): boolean {
+    modelIsReady(): boolean {
         if (!this.models) {
             return true;
         }
 
-        let downloaded = false;
+        let ready = false;
 
         for (let i = 0; i < this.models.length; i++) {
-            if (!Model.validate(this.models[i])) {
-                downloaded = true;
+            if (!Model.isReady(this.models[i])) {
+                ready = true;
             }
         }
 
-        return downloaded;
+        return ready;
     }
 
     getModel(): Model | null {
@@ -95,11 +95,11 @@ export default class IdkType extends ConfigType {
         return model;
     }
 
-    validateHeadModel(): boolean {
+    headModelIsReady(): boolean {
         let downloaded = false;
 
         for (let i = 0; i < this.heads.length; i++) {
-            if (this.heads[i] != -1 && !Model.validate(this.heads[i])) {
+            if (this.heads[i] != -1 && !Model.isReady(this.heads[i])) {
                 downloaded = true;
             }
         }

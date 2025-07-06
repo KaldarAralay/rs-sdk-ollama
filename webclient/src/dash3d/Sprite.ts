@@ -6,7 +6,7 @@ export default class Sprite {
     readonly y: number;
     readonly x: number;
     readonly z: number;
-    readonly model: ModelSource | null;
+    model: ModelSource | null;
     readonly yaw: number;
     readonly minSceneTileX: number;
     readonly maxSceneTileX: number;

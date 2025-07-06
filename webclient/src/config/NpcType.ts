@@ -163,13 +163,13 @@ export default class NpcType extends ConfigType {
             model = NpcType.modelCache.get(BigInt(this.id)) as Model | null;
 
             if (!model && this.models) {
-                let exists = false;
+                let ready = false;
                 for (let i = 0; i < this.models.length; i++) {
-                    if (!Model.validate(this.models[i])) {
-                        exists = true;
+                    if (!Model.isReady(this.models[i])) {
+                        ready = true;
                     }
                 }
-                if (exists) {
+                if (ready) {
                     return null;
                 }
 
@@ -232,7 +232,7 @@ export default class NpcType extends ConfigType {
 
         let exists = false;
         for (let i = 0; i < this.heads.length; i++) {
-            if (!Model.validate(this.heads[i])) {
+            if (!Model.isReady(this.heads[i])) {
                 exists = true;
             }
         }

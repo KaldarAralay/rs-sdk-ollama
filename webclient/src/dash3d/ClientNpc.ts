@@ -20,81 +20,69 @@ export const enum NpcUpdate {
 export default class ClientNpc extends ClientEntity {
     type: NpcType | null = null;
 
-    draw(_loopCycle: number): Model | null {
-        if (!this.type) {
+    getModel(): Model | null {
+        if (this.type == null) {
             return null;
         }
 
-        if (this.spotanimId === -1 || this.spotanimFrame === -1) {
-            return this.getSequencedModel();
-        }
-
-        const model: Model | null = this.getSequencedModel();
-        if (!model) {
+        let model = this.getAnimatedModel();
+        if (model == null) {
             return null;
         }
-        const spotanim: SpotAnimType = SpotAnimType.types[this.spotanimId];
 
-        const model1: Model = Model.modelShareColored(spotanim.getModel(), true, !spotanim.animHasAlpha, false);
-        model1.translateModel(-this.spotanimOffset, 0, 0);
-        model1.createLabelReferences();
-        if (spotanim.seq && spotanim.seq.frames) {
-            model1.applyTransform(spotanim.seq.frames[this.spotanimFrame]);
-        }
-        model1.labelFaces = null;
-        model1.labelVertices = null;
+        this.height = model.minY;
 
-        if (spotanim.resizeh !== 128 || spotanim.resizev !== 128) {
-            model1.scale(spotanim.resizeh, spotanim.resizev, spotanim.resizeh);
-        }
+        if (this.spotanimId != -1 && this.spotanimFrame != -1) {
+            let spot = SpotAnimType.types[this.spotanimId];
+            let spotModel = spot.getModel();
 
-        model1.calculateNormals(64 + spotanim.ambient, 850 + spotanim.contrast, -30, -50, -30, true);
-        const models: Model[] = [model, model1];
+            if (spotModel != null) {
+                const temp: Model = Model.modelShareColored(spotModel, true, !spot.animHasAlpha, false);
+                temp.translate(-this.spotanimHeight, 0, 0);
+                temp.createLabelReferences();
+                temp.applyTransform(spot.seq!.frames![this.spotanimFrame]);
 
-        const tmp: Model = Model.modelFromModelsBounds(models, 2);
-        if (this.type.size === 1) {
-            tmp.picking = true;
-        }
+                temp.labelFaces = null;
+                temp.labelVertices = null;
 
-        return tmp;
-    }
-
-    isVisibleNow(): boolean {
-        return this.type !== null;
-    }
-
-    private getSequencedModel(): Model | null {
-        if (!this.type) {
-            return null;
-        }
-        if (this.primarySeqId >= 0 && this.primarySeqDelay === 0) {
-            const frames: Int16Array | null = SeqType.types[this.primarySeqId].frames;
-            if (frames) {
-                const primaryTransformId: number = frames[this.primarySeqFrame];
-                let secondaryTransformId: number = -1;
-                if (this.secondarySeqId >= 0 && this.secondarySeqId !== this.seqStandId) {
-                    const secondFrames: Int16Array | null = SeqType.types[this.secondarySeqId].frames;
-                    if (secondFrames) {
-                        secondaryTransformId = secondFrames[this.secondarySeqFrame];
-                    }
+                if (spot.resizeh != 128 || spot.resizev != 128) {
+                    temp.scale(spot.resizev, spot.resizeh, spot.resizeh);
                 }
-                return this.type.getModel(primaryTransformId, secondaryTransformId, SeqType.types[this.primarySeqId].walkmerge);
+
+                temp.calculateNormals(spot.ambient + 64, spot.contrast + 850, -30, -50, -30, true);
+
+                const models: Model[] = [model, temp];
+                model = Model.modelFromModelsBounds(models, 2);
             }
         }
 
-        let transformId: number = -1;
-        if (this.secondarySeqId >= 0) {
-            const secondFrames: Int16Array | null = SeqType.types[this.secondarySeqId].frames;
-            if (secondFrames) {
-                transformId = secondFrames[this.secondarySeqFrame];
-            }
+        if (this.type.size == 1) {
+            model.picking = true;
         }
 
-        const model: Model | null = this.type.getModel(transformId, -1, null);
-        if (!model) {
-            return null;
-        }
-        this.maxY = model.minY;
         return model;
+    }
+
+    private getAnimatedModel(): Model | null {
+        if (this.primarySeqId < 0 || this.primarySeqDelay != 0) {
+            let transform = -1;
+            if (this.secondarySeqId >= 0) {
+                transform = SeqType.types[this.secondarySeqId].frames![this.secondarySeqFrame];
+            }
+
+            return this.type!.getModel(transform, -1, null);
+        } else {
+            let primaryTransform = SeqType.types[this.primarySeqId].frames![this.primarySeqFrame];
+            let secondaryTransform = -1;
+            if (this.secondarySeqId >= 0 && this.secondarySeqId != this.readyanim) {
+                secondaryTransform = SeqType.types[this.secondarySeqId].frames![this.secondarySeqFrame];
+            }
+
+            return this.type!.getModel(primaryTransform, secondaryTransform, SeqType.types[this.primarySeqId].walkmerge);
+        }
+    }
+
+    isVisible(): boolean {
+        return this.type !== null;
     }
 }

@@ -8,16 +8,16 @@ export default abstract class ClientEntity extends ModelSource {
     x: number = 0;
     z: number = 0;
     yaw: number = 0;
-    seqStretches: boolean = false;
+    needsForwardDrawPadding: boolean = false;
     size: number = 1;
-    seqStandId: number = -1;
-    seqTurnId: number = -1;
-    seqWalkId: number = -1;
-    seqTurnAroundId: number = -1;
-    seqTurnLeftId: number = -1;
-    seqTurnRightId: number = -1;
-    seqRunId: number = -1;
-    chat: string | null = null;
+    readyanim: number = -1;
+    turnanim: number = -1;
+    walkanim: number = -1;
+    walkanim_b: number = -1;
+    walkanim_l: number = -1;
+    walkanim_r: number = -1;
+    runanim: number = -1;
+    chatMessage: string | null = null;
     chatTimer: number = 100;
     chatColor: number = 0;
     chatStyle: number = 0;
@@ -42,7 +42,7 @@ export default abstract class ClientEntity extends ModelSource {
     spotanimFrame: number = 0;
     spotanimCycle: number = 0;
     spotanimLastCycle: number = 0;
-    spotanimOffset: number = 0;
+    spotanimHeight: number = 0;
     forceMoveStartSceneTileX: number = 0;
     forceMoveEndSceneTileX: number = 0;
     forceMoveStartSceneTileZ: number = 0;
@@ -51,7 +51,7 @@ export default abstract class ClientEntity extends ModelSource {
     forceMoveStartCycle: number = 0;
     forceMoveFaceDirection: number = 0;
     cycle: number = 0;
-    maxY: number = 0;
+    height: number = 0;
     dstYaw: number = 0;
     routeLength: number = 0;
     routeFlagX: Int32Array = new Int32Array(10);
@@ -66,7 +66,7 @@ export default abstract class ClientEntity extends ModelSource {
 
     preanimRouteLength: number = 0;
 
-    abstract isVisibleNow(): boolean;
+    abstract isVisible(): boolean;
 
     move(teleport: boolean, x: number, z: number): void {
         if (this.primarySeqId !== -1 && SeqType.types[this.primarySeqId].postanim_move === PostanimMove.ABORTANIM) {

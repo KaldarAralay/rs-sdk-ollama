@@ -11,6 +11,7 @@ import Jagfile from '#/io/Jagfile.js';
 import Packet from '#/io/Packet.js';
 
 import { TypedArray1d } from '#/util/Arrays.js';
+import type OnDemand from '#/io/OnDemand.ts';
 
 export default class LocType extends ConfigType {
     static ignoreCache: boolean = false;
@@ -204,15 +205,57 @@ export default class LocType extends ConfigType {
         }
     }
 
-    validateShape(shape: number): boolean {
-        return false;
+    shapeModelsAreReady(shape: number): boolean {
+		if (this.shapes === null) {
+			return true;
+		}
+
+        let index = -1;
+		for (let i = 0; i < this.shapes.length; i++) {
+			if (this.shapes[i] == shape) {
+				index = i;
+				break;
+			}
+		}
+		if (index == -1) {
+			return true;
+		}
+
+		if (this.models == null) {
+			return true;
+		}
+
+		const model = this.models[index];
+		return model == -1 ? true : Model.isReady(model & 0xFFFF);
     }
 
-    validateModels(): boolean {
-        return false;
+    modelsAreReady(): boolean {
+		let ready = true;
+		if (this.models == null) {
+			return true;
+		}
+
+		for (let i = 0; i < this.models.length && ready; i++) {
+			const model = this.models[i];
+			if (model != -1) {
+				ready = Model.isReady(model & 0xFFFF);
+			}
+		}
+
+		return ready;
     }
 
-    prefetch() {
+    prefetch(od: OnDemand) {
+		if (this.models == null) {
+			return;
+		}
+
+		for (let i = 0; i < this.models.length; i++) {
+			const model = this.models[i];
+			if (model != -1) {
+				od.prefetch(0, model & 0xFFFF);
+			}
+		}
     }
 
     getModel(shape: number, angle: number, heightmapSW: number, heightmapSE: number, heightmapNE: number, heightmapNW: number, transformId: number): Model | null {
@@ -227,7 +270,6 @@ export default class LocType extends ConfigType {
                 break;
             }
         }
-
         if (index === -1) {
             return null;
         }
@@ -251,14 +293,14 @@ export default class LocType extends ConfigType {
                 const groundY: number = ((heightmapSW + heightmapSE + heightmapNE + heightmapNW) / 4) | 0;
 
                 for (let i: number = 0; i < cached.vertexCount; i++) {
-                    const x: number = cached.vertexX[i];
-                    const z: number = cached.vertexZ[i];
+                    const x: number = cached.vertexX![i];
+                    const z: number = cached.vertexZ![i];
 
                     const heightS: number = heightmapSW + ((((heightmapSE - heightmapSW) * (x + 64)) / 128) | 0);
                     const heightN: number = heightmapNW + ((((heightmapNE - heightmapNW) * (x + 64)) / 128) | 0);
                     const y: number = heightS + ((((heightN - heightS) * (z + 64)) / 128) | 0);
 
-                    cached.vertexY[i] += y - groundY;
+                    cached.vertexY![i] += y - groundY;
                 }
 
                 cached.calculateBoundsY();
@@ -321,7 +363,7 @@ export default class LocType extends ConfigType {
         }
 
         if (translated) {
-            modified.translateModel(this.offsety, this.offsetx, this.offsetz);
+            modified.translate(this.offsety, this.offsetx, this.offsetz);
         }
 
         modified.calculateNormals((this.ambient & 0xff) + 64, (this.contrast & 0xff) * 5 + 768, -50, -10, -50, !this.sharelight);
@@ -340,14 +382,14 @@ export default class LocType extends ConfigType {
             const groundY: number = ((heightmapSW + heightmapSE + heightmapNE + heightmapNW) / 4) | 0;
 
             for (let i: number = 0; i < modified.vertexCount; i++) {
-                const x: number = modified.vertexX[i];
-                const z: number = modified.vertexZ[i];
+                const x: number = modified.vertexX![i];
+                const z: number = modified.vertexZ![i];
 
                 const heightS: number = heightmapSW + ((((heightmapSE - heightmapSW) * (x + 64)) / 128) | 0);
                 const heightN: number = heightmapNW + ((((heightmapNE - heightmapNW) * (x + 64)) / 128) | 0);
                 const y: number = heightS + ((((heightN - heightS) * (z + 64)) / 128) | 0);
 
-                modified.vertexY[i] += y - groundY;
+                modified.vertexY![i] += y - groundY;
             }
 
             modified.calculateBoundsY();

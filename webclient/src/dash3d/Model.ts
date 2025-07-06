@@ -257,7 +257,7 @@ export default class Model extends ModelSource {
         return Model.fromId(id);
     }
 
-    static validate(id: number): boolean {
+    static isReady(id: number): boolean {
         if (!Model.meta) {
             return false;
         }
@@ -1612,7 +1612,7 @@ export default class Model extends ModelSource {
         }
     }
 
-    translateModel(y: number, x: number, z: number): void {
+    translate(y: number, x: number, z: number): void {
         for (let v: number = 0; v < this.vertexCount; v++) {
             this.vertexX![v] += x;
             this.vertexY![v] += y;

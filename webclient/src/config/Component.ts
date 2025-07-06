@@ -392,7 +392,7 @@ export default class Component {
         return model;
     }
 
-    cacheModel(model: Model, type: number, id: number) {
+    static cacheModel(model: Model, type: number, id: number) {
         Component.modelCache.clear();
 
         if (model && type != 4) {

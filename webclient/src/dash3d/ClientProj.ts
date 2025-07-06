@@ -89,9 +89,13 @@ export default class ClientProj extends ModelSource {
         }
     }
 
-    draw(): Model | null {
-        const tmp: Model = this.spotanim.getModel();
-        const model: Model = Model.modelShareColored(tmp, true, !this.spotanim.animHasAlpha, false);
+    getModel(): Model | null {
+        const spotModel: Model | null = this.spotanim.getModel();
+        if (!spotModel) {
+            return null;
+        }
+
+        const model: Model = Model.modelShareColored(spotModel, true, !this.spotanim.animHasAlpha, false);
 
         if (this.spotanim.seq && this.spotanim.seq.frames) {
             model.createLabelReferences();

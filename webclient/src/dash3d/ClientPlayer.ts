@@ -43,7 +43,7 @@ const enum HairColor {
     HAIR_MAGENTA = 54193,
 }
 
-const enum BodyColorSource {   
+const enum BodyColorSource {
     BODY_KHAKI = 8741,
     BODY_CHARCOAL = 12,
     BODY_CRIMSON = 64030,
@@ -193,16 +193,18 @@ export default class ClientPlayer extends ClientEntity {
             SkinColor.SKIN
         ]
     ];
-    static modelCache: LruCache | null = new LruCache(200);
 
     name: string | null = null;
-    playerVisible: boolean = false;
+    visible: boolean = false;
     gender: number = 0;
     headicons: number = 0;
     appearance: Uint16Array = new Uint16Array(12);
     colour: Uint16Array = new Uint16Array(5);
     combatLevel: number = 0;
-    appearanceHashcode: bigint = 0n;
+    hash: bigint = 0n;
+    lowMemory: boolean = false;
+    modelCacheKey: bigint = -1n;
+    static modelCache: LruCache | null = new LruCache(200);
     y: number = 0;
     locStartCycle: number = 0;
     locStopCycle: number = 0;
@@ -214,85 +216,6 @@ export default class ClientPlayer extends ClientEntity {
     minTileZ: number = 0;
     maxTileX: number = 0;
     maxTileZ: number = 0;
-    lowMemory: boolean = false;
-
-    draw(loopCycle: number): Model | null {
-        if (!this.playerVisible) {
-            return null;
-        }
-
-        let model: Model = this.getSequencedModel();
-        this.maxY = model.minY;
-        model.picking = true;
-
-        if (this.lowMemory) {
-            return model;
-        }
-
-        if (this.spotanimId !== -1 && this.spotanimFrame !== -1) {
-            const spotanim: SpotAnimType = SpotAnimType.types[this.spotanimId];
-            const model2: Model = Model.modelShareColored(spotanim.getModel(), true, !spotanim.animHasAlpha, false);
-
-            model2.translateModel(-this.spotanimOffset, 0, 0);
-            model2.createLabelReferences();
-            if (spotanim.seq && spotanim.seq.frames) {
-                model2.applyTransform(spotanim.seq.frames[this.spotanimFrame]);
-            }
-            model2.labelFaces = null;
-            model2.labelVertices = null;
-            if (spotanim.resizeh !== 128 || spotanim.resizev !== 128) {
-                model2.scale(spotanim.resizeh, spotanim.resizev, spotanim.resizeh);
-            }
-            model2.calculateNormals(spotanim.ambient + 64, spotanim.contrast + 850, -30, -50, -30, true);
-
-            const models: Model[] = [model, model2];
-            model = Model.modelFromModelsBounds(models, 2);
-        }
-
-        if (this.locModel) {
-            if (loopCycle >= this.locStopCycle) {
-                this.locModel = null;
-            }
-
-            if (loopCycle >= this.locStartCycle && loopCycle < this.locStopCycle) {
-                const loc: Model | null = this.locModel;
-                if (loc) {
-                    loc.translateModel(this.locOffsetY - this.y, this.locOffsetX - this.x, this.locOffsetZ - this.z);
-                    if (this.dstYaw === 512) {
-                        loc.rotateY90();
-                        loc.rotateY90();
-                        loc.rotateY90();
-                    } else if (this.dstYaw === 1024) {
-                        loc.rotateY90();
-                        loc.rotateY90();
-                    } else if (this.dstYaw === 1536) {
-                        loc.rotateY90();
-                    }
-
-                    const models: Model[] = [model, loc];
-                    model = Model.modelFromModelsBounds(models, 2);
-                    if (this.dstYaw === 512) {
-                        loc.rotateY90();
-                    } else if (this.dstYaw === 1024) {
-                        loc.rotateY90();
-                        loc.rotateY90();
-                    } else if (this.dstYaw === 1536) {
-                        loc.rotateY90();
-                        loc.rotateY90();
-                        loc.rotateY90();
-                    }
-                    loc.translateModel(this.y - this.locOffsetY, this.x - this.locOffsetX, this.z - this.locOffsetZ);
-                }
-            }
-        }
-
-        model.picking = true;
-        return model;
-    }
-
-    isVisibleNow(): boolean {
-        return this.playerVisible;
-    }
 
     /*@__MANGLE_PROP__*/
     read(buf: Packet): void {
@@ -318,104 +241,152 @@ export default class ClientPlayer extends ClientEntity {
             this.colour[part] = color;
         }
 
-        this.seqStandId = buf.g2();
-        if (this.seqStandId === 65535) {
-            this.seqStandId = -1;
+        this.readyanim = buf.g2();
+        if (this.readyanim === 65535) {
+            this.readyanim = -1;
         }
 
-        this.seqTurnId = buf.g2();
-        if (this.seqTurnId === 65535) {
-            this.seqTurnId = -1;
+        this.turnanim = buf.g2();
+        if (this.turnanim === 65535) {
+            this.turnanim = -1;
         }
 
-        this.seqWalkId = buf.g2();
-        if (this.seqWalkId === 65535) {
-            this.seqWalkId = -1;
+        this.walkanim = buf.g2();
+        if (this.walkanim === 65535) {
+            this.walkanim = -1;
         }
 
-        this.seqTurnAroundId = buf.g2();
-        if (this.seqTurnAroundId === 65535) {
-            this.seqTurnAroundId = -1;
+        this.walkanim_b = buf.g2();
+        if (this.walkanim_b === 65535) {
+            this.walkanim_b = -1;
         }
 
-        this.seqTurnLeftId = buf.g2();
-        if (this.seqTurnLeftId === 65535) {
-            this.seqTurnLeftId = -1;
+        this.walkanim_l = buf.g2();
+        if (this.walkanim_l === 65535) {
+            this.walkanim_l = -1;
         }
 
-        this.seqTurnRightId = buf.g2();
-        if (this.seqTurnRightId === 65535) {
-            this.seqTurnRightId = -1;
+        this.walkanim_r = buf.g2();
+        if (this.walkanim_r === 65535) {
+            this.walkanim_r = -1;
         }
 
-        this.seqRunId = buf.g2();
-        if (this.seqRunId === 65535) {
-            this.seqRunId = -1;
+        this.runanim = buf.g2();
+        if (this.runanim === 65535) {
+            this.runanim = -1;
         }
 
         this.name = JString.formatName(JString.fromBase37(buf.g8()));
         this.combatLevel = buf.g1();
-        this.playerVisible = true;
+        this.visible = true;
 
-        this.appearanceHashcode = 0n;
+        this.hash = 0n;
         for (let part: number = 0; part < 12; part++) {
-            this.appearanceHashcode <<= 0x4n;
+            this.hash <<= 0x4n;
             if (this.appearance[part] >= 256) {
-                this.appearanceHashcode += BigInt(this.appearance[part]) - 256n;
+                this.hash += BigInt(this.appearance[part]) - 256n;
             }
         }
         if (this.appearance[0] >= 256) {
-            this.appearanceHashcode += (BigInt(this.appearance[0]) - 256n) >> 4n;
+            this.hash += (BigInt(this.appearance[0]) - 256n) >> 4n;
         }
         if (this.appearance[1] >= 256) {
-            this.appearanceHashcode += (BigInt(this.appearance[1]) - 256n) >> 8n;
+            this.hash += (BigInt(this.appearance[1]) - 256n) >> 8n;
         }
         for (let part: number = 0; part < 5; part++) {
-            this.appearanceHashcode <<= 0x3n;
-            this.appearanceHashcode += BigInt(this.colour[part]);
+            this.hash <<= 0x3n;
+            this.hash += BigInt(this.colour[part]);
         }
-        this.appearanceHashcode <<= 0x1n;
-        this.appearanceHashcode += BigInt(this.gender);
+        this.hash <<= 0x1n;
+        this.hash += BigInt(this.gender);
     }
 
-    getHeadModel(): Model | null {
-        if (!this.playerVisible) {
+    getModel(loopCycle: number): Model | null {
+        if (!this.visible) {
             return null;
         }
 
-        const models: (Model | null)[] = new TypedArray1d(12, null);
-        let modelCount: number = 0;
-        for (let part: number = 0; part < 12; part++) {
-            const value: number = this.appearance[part];
+        let model = this.getAnimatedModel();
+        if (model == null) {
+            return null;
+        }
 
-            if (value >= 256 && value < 512) {
-                models[modelCount++] = IdkType.types[value - 256].getHeadModel();
+        this.height = model.minY;
+        model.picking = true;
+
+        if (this.lowMemory) {
+            return model;
+        }
+
+        if (this.spotanimId != -1 && this.spotanimFrame != -1) {
+            const spot = SpotAnimType.types[this.spotanimId];
+            const spotModel = spot.getModel();
+
+            if (spotModel != null) {
+                const temp: Model = Model.modelShareColored(spotModel, true, !spot.animHasAlpha, false);
+                temp.translate(-this.spotanimHeight, 0, 0);
+                temp.createLabelReferences();
+                if (spot.seq && spot.seq.frames) {
+                    temp.applyTransform(spot.seq.frames[this.spotanimFrame]);
+                }
+                temp.labelFaces = null;
+                temp.labelVertices = null;
+                if (spot.resizeh != 128 || spot.resizev != 128) {
+                    temp.scale(spot.resizev, spot.resizeh, spot.resizeh);
+                }
+                temp.calculateNormals(spot.ambient + 64, spot.contrast + 850, -30, -50, -30, true);
+
+                const models: Model[] = [model, temp];
+                model = Model.modelFromModelsBounds(models, 2);
+            }
+        }
+
+        if (this.locModel != null) {
+            if (loopCycle >= this.locStopCycle) {
+                this.locModel = null;
             }
 
-            if (value >= 512) {
-                const headModel: Model | null = ObjType.get(value - 512).getHeadModel(this.gender);
-                if (headModel) {
-                    models[modelCount++] = headModel;
+            if (loopCycle >= this.locStartCycle && loopCycle < this.locStopCycle) {
+                const loc = this.locModel;
+                if (loc) {
+                    loc.translate(this.locOffsetY - this.y, this.locOffsetX - this.x, this.locOffsetZ - this.z);
+
+                    if (this.dstYaw == 512) {
+                        loc.rotateY90();
+                        loc.rotateY90();
+                        loc.rotateY90();
+                    } else if (this.dstYaw == 1024) {
+                        loc.rotateY90();
+                        loc.rotateY90();
+                    } else if (this.dstYaw == 1536) {
+                        loc.rotateY90();
+                    }
+
+                    const models: Model[] = [model, loc];
+                    model = Model.modelFromModelsBounds(models, 2);
+
+                    if (this.dstYaw == 512) {
+                        loc.rotateY90();
+                    } else if (this.dstYaw == 1024) {
+                        loc.rotateY90();
+                        loc.rotateY90();
+                    } else if (this.dstYaw == 1536) {
+                        loc.rotateY90();
+                        loc.rotateY90();
+                        loc.rotateY90();
+                    }
+
+                    loc.translate(this.y - this.locOffsetY, super.x - this.locOffsetX, super.z - this.locOffsetZ);
                 }
             }
         }
 
-        const tmp: Model = Model.modelFromModels(models, modelCount);
-        for (let part: number = 0; part < 5; part++) {
-            if (this.colour[part] === 0) {
-                continue;
-            }
-            tmp.recolour(ClientPlayer.DESIGN_IDK_COLORS[part][0], ClientPlayer.DESIGN_IDK_COLORS[part][this.colour[part]]);
-            if (part === 1) {
-                tmp.recolour(ClientPlayer.TORSO_RECOLORS[0], ClientPlayer.TORSO_RECOLORS[this.colour[part]]);
-            }
-        }
-
-        return tmp;
+        model.picking = true;
+        return model;
     }
 
-    private getSequencedModel(): Model {
-        let hashCode: bigint = this.appearanceHashcode;
+    getAnimatedModel(): Model | null {
+        let hash: bigint = this.hash;
         let primaryTransformId: number = -1;
         let secondaryTransformId: number = -1;
         let rightHandValue: number = -1;
@@ -427,7 +398,8 @@ export default class ClientPlayer extends ClientEntity {
             if (seq.frames) {
                 primaryTransformId = seq.frames[this.primarySeqFrame];
             }
-            if (this.secondarySeqId >= 0 && this.secondarySeqId !== this.seqStandId) {
+
+            if (this.secondarySeqId >= 0 && this.secondarySeqId !== this.readyanim) {
                 const secondFrames: Int16Array | null = SeqType.types[this.secondarySeqId].frames;
                 if (secondFrames) {
                     secondaryTransformId = secondFrames[this.secondarySeqFrame];
@@ -436,12 +408,12 @@ export default class ClientPlayer extends ClientEntity {
 
             if (seq.righthand >= 0) {
                 rightHandValue = seq.righthand;
-                hashCode += BigInt(rightHandValue - this.appearance[5]) << 8n;
+                hash += BigInt(rightHandValue - this.appearance[5]) << 40n;
             }
 
             if (seq.lefthand >= 0) {
                 leftHandValue = seq.lefthand;
-                hashCode += BigInt(leftHandValue - this.appearance[3]) << 16n;
+                hash += BigInt(leftHandValue - this.appearance[3]) << 48n;
             }
         } else if (this.secondarySeqId >= 0) {
             const secondFrames: Int16Array | null = SeqType.types[this.secondarySeqId].frames;
@@ -450,7 +422,41 @@ export default class ClientPlayer extends ClientEntity {
             }
         }
 
-        let model: Model | null = ClientPlayer.modelCache?.get(hashCode) as Model | null;
+        let model: Model | null = ClientPlayer.modelCache?.get(hash) as Model | null;
+        if (!model) {
+            let hasModel = false;
+
+            for (let part = 0; part < 12; part++) {
+                let value = this.appearance[part];
+
+                if (leftHandValue >= 0 && part == 3) {
+                    value = leftHandValue;
+                }
+
+                if (rightHandValue >= 0 && part == 5) {
+                    value = rightHandValue;
+                }
+
+                if (value >= 0x100 && value < 0x200 && !IdkType.types[value - 0x100].modelIsReady()) {
+                    hasModel = true;
+                }
+
+                if (value >= 0x200 && !ObjType.get(value - 0x200).wornModelIsReady(this.gender)) {
+                    hasModel = true;
+                }
+            }
+
+            if (hasModel) {
+                if (this.modelCacheKey !== -1n && ClientPlayer.modelCache) {
+                    model = ClientPlayer.modelCache.get(this.hash) as Model | null;
+                }
+
+                if (model == null) {
+                    return null;
+                }
+            }
+        }
+
         if (!model) {
             const models: (Model | null)[] = new TypedArray1d(12, null);
             let modelCount: number = 0;
@@ -487,7 +493,9 @@ export default class ClientPlayer extends ClientEntity {
                 if (this.colour[part] === 0) {
                     continue;
                 }
+
                 model.recolour(ClientPlayer.DESIGN_IDK_COLORS[part][0], ClientPlayer.DESIGN_IDK_COLORS[part][this.colour[part]]);
+
                 if (part === 1) {
                     model.recolour(ClientPlayer.TORSO_RECOLORS[0], ClientPlayer.TORSO_RECOLORS[this.colour[part]]);
                 }
@@ -495,7 +503,8 @@ export default class ClientPlayer extends ClientEntity {
 
             model.createLabelReferences();
             model.calculateNormals(64, 850, -30, -50, -30, true);
-            ClientPlayer.modelCache?.put(hashCode, model);
+            ClientPlayer.modelCache?.put(hash, model);
+            this.modelCacheKey = hash;
         }
 
         if (this.lowMemory) {
@@ -513,5 +522,45 @@ export default class ClientPlayer extends ClientEntity {
         tmp.labelFaces = null;
         tmp.labelVertices = null;
         return tmp;
+    }
+
+    getHeadModel(): Model | null {
+        if (!this.visible) {
+            return null;
+        }
+
+        const models: (Model | null)[] = new TypedArray1d(12, null);
+        let modelCount: number = 0;
+        for (let part: number = 0; part < 12; part++) {
+            const value: number = this.appearance[part];
+
+            if (value >= 256 && value < 512) {
+                models[modelCount++] = IdkType.types[value - 256].getHeadModel();
+            }
+
+            if (value >= 512) {
+                const headModel: Model | null = ObjType.get(value - 512).getHeadModel(this.gender);
+                if (headModel) {
+                    models[modelCount++] = headModel;
+                }
+            }
+        }
+
+        const tmp: Model = Model.modelFromModels(models, modelCount);
+        for (let part: number = 0; part < 5; part++) {
+            if (this.colour[part] === 0) {
+                continue;
+            }
+            tmp.recolour(ClientPlayer.DESIGN_IDK_COLORS[part][0], ClientPlayer.DESIGN_IDK_COLORS[part][this.colour[part]]);
+            if (part === 1) {
+                tmp.recolour(ClientPlayer.TORSO_RECOLORS[0], ClientPlayer.TORSO_RECOLORS[this.colour[part]]);
+            }
+        }
+
+        return tmp;
+    }
+
+    isVisible(): boolean {
+        return this.visible;
     }
 }

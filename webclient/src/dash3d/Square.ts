@@ -12,38 +12,38 @@ import { TypedArray1d } from '#/util/Arrays.js';
 
 export default class Square extends Linkable {
     // constructor
-    groundLevel: number;
+    level: number;
     readonly x: number;
     readonly z: number;
-    readonly occludeLevel: number;
+    readonly originalLevel: number;
     readonly locs: (Sprite | null)[];
-    readonly locSpan: Int32Array;
+    readonly primaryExtendDirections: Int32Array;
 
     // runtime
-    underlay: QuickGround | null = null;
-    overlay: Ground | null = null;
+    quickGround: QuickGround | null = null;
+    ground: Ground | null = null;
     wall: Wall | null = null;
-    wallDecoration: Decor | null = null;
-    groundDecoration: GroundDecor | null = null;
+    decor: Decor | null = null;
+    groundDecor: GroundDecor | null = null;
     objStack: GroundObject | null = null;
-    bridge: Square | null = null;
-    locCount: number = 0;
-    locSpans: number = 0;
+    linkedSquare: Square | null = null;
+    primaryCount: number = 0;
+    combinedPrimaryExtendDirections: number = 0;
     drawLevel: number = 0;
-    groundVisible: boolean = false;
-    update: boolean = false;
-    containsLocs: boolean = false;
-    checkLocSpans: number = 0;
-    blockLocSpans: number = 0;
-    inverseBlockLocSpans: number = 0;
+    drawFront: boolean = false;
+    drawBack: boolean = false;
+    drawPrimaries: boolean = false;
+    cornerSides: number = 0;
+    sidesBeforeCorner: number = 0;
+    sidesAfterCorner: number = 0;
     backWallTypes: number = 0;
 
     constructor(level: number, x: number, z: number) {
         super();
-        this.occludeLevel = this.groundLevel = level;
+        this.originalLevel = this.level = level;
         this.x = x;
         this.z = z;
         this.locs = new TypedArray1d(5, null);
-        this.locSpan = new Int32Array(5);
+        this.primaryExtendDirections = new Int32Array(5);
     }
 }

@@ -523,7 +523,7 @@ export default class ObjType extends ConfigType {
         return icon;
     }
 
-    validateWornModel(gender: number): boolean {
+    wornModelIsReady(gender: number): boolean {
 		let wear = this.manwear;
 		let wear2 = this.manwear2;
 		let wear3 = this.manwear3;
@@ -537,17 +537,17 @@ export default class ObjType extends ConfigType {
 			return true;
 		}
 
-		let exists = true;
-		if (!Model.validate(wear)) {
-			exists = false;
+		let ready = true;
+		if (!Model.isReady(wear)) {
+			ready = false;
 		}
-		if (wear2 != -1 && !Model.validate(wear2)) {
-			exists = false;
+		if (wear2 != -1 && !Model.isReady(wear2)) {
+			ready = false;
 		}
-		if (wear3 != -1 && !Model.validate(wear3)) {
-			exists = false;
+		if (wear3 != -1 && !Model.isReady(wear3)) {
+			ready = false;
 		}
-		return exists;
+		return ready;
     }
 
     getWornModel(gender: number): Model | null {
@@ -567,24 +567,35 @@ export default class ObjType extends ConfigType {
             id3 = this.womanwear3;
         }
 
-        let model: Model = Model.tryGet(id1);
+        let model: Model | null = Model.tryGet(id1);
+        if (!model) {
+            return null;
+        }
+
         if (id2 !== -1) {
-            const model2: Model = Model.tryGet(id2);
+            const model2: Model | null = Model.tryGet(id2);
+            if (!model2) {
+                return null;
+            }
 
             if (id3 === -1) {
                 const models: Model[] = [model, model2];
                 model = Model.modelFromModels(models, 2);
             } else {
-                const model3: Model = Model.tryGet(id3);
+                const model3: Model | null = Model.tryGet(id3);
+                if (!model3) {
+                    return null;
+                }
+
                 const models: Model[] = [model, model2, model3];
                 model = Model.modelFromModels(models, 3);
             }
         }
 
         if (gender === 0 && this.manwearOffsetY !== 0) {
-            model.translateModel(this.manwearOffsetY, 0, 0);
+            model.translate(this.manwearOffsetY, 0, 0);
         } else if (gender === 1 && this.womanwearOffsetY !== 0) {
-            model.translateModel(this.womanwearOffsetY, 0, 0);
+            model.translate(this.womanwearOffsetY, 0, 0);
         }
 
         if (this.recol_s && this.recol_d) {
@@ -596,7 +607,7 @@ export default class ObjType extends ConfigType {
         return model;
     }
 
-    validatHeadModel(gender: number): boolean {
+    headModelIsReady(gender: number): boolean {
 		let head = this.manhead;
 		let head2 = this.manhead2;
 		if (gender == 1) {
@@ -608,14 +619,14 @@ export default class ObjType extends ConfigType {
 			return true;
 		}
 
-		let exists = true;
-		if (!Model.validate(head)) {
-			exists = false;
+		let ready = true;
+		if (!Model.isReady(head)) {
+			ready = false;
 		}
-		if (head2 != -1 && !Model.validate(head2)) {
-			exists = false;
+		if (head2 != -1 && !Model.isReady(head2)) {
+			ready = false;
 		}
-		return exists;
+		return ready;
     }
 
     getHeadModel(gender: number): Model | null {
@@ -633,9 +644,17 @@ export default class ObjType extends ConfigType {
             head2 = this.womanhead2;
         }
 
-        let model: Model = Model.tryGet(head1);
+        let model: Model | null = Model.tryGet(head1);
+        if (!model) {
+            return null;
+        }
+
         if (head2 !== -1) {
-            const model2: Model = Model.tryGet(head2);
+            const model2: Model | null = Model.tryGet(head2);
+            if (!model2) {
+                return null;
+            }
+
             const models: Model[] = [model, model2];
             model = Model.modelFromModels(models, 2);
         }
