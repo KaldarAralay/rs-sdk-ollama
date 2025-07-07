@@ -170,23 +170,23 @@ export default class OnDemand extends OnDemandProvider {
     }
 
     async prefetchMaps(members: boolean) {
-		const count = this.mapIndex.length;
-		for (let i = 0; i < count; i++) {
-			if (members || this.mapMembers[i] != 0) {
-				await this.prefetchPriority(3, this.mapLoc[i], 2);
-				await this.prefetchPriority(3, this.mapLand[i], 2);
-			}
-		}
+        const count = this.mapIndex.length;
+        for (let i = 0; i < count; i++) {
+            if (members || this.mapMembers[i] != 0) {
+                await this.prefetchPriority(3, this.mapLoc[i], 2);
+                await this.prefetchPriority(3, this.mapLand[i], 2);
+            }
+        }
     }
 
     hasMapLocFile(file: number) {
-		for (let i = 0; i < this.mapIndex.length; i++) {
-			if (this.mapLoc[i] === file) {
-				return true;
-			}
-		}
+        for (let i = 0; i < this.mapIndex.length; i++) {
+            if (this.mapLoc[i] === file) {
+                return true;
+            }
+        }
 
-		return false;
+        return false;
     }
 
     getModelFlags(id: number) {
@@ -202,9 +202,9 @@ export default class OnDemand extends OnDemandProvider {
     }
 
     request(archive: number, file: number) {
-		if (archive < 0 || archive > this.versions.length || file < 0 || file > this.versions[archive].length || this.versions[archive][file] == 0) {
-			return;
-		}
+        if (archive < 0 || archive > this.versions.length || file < 0 || file > this.versions[archive].length || this.versions[archive][file] == 0) {
+            return;
+        }
 
         for (let req = this.requests.head() as OnDemandRequest | null; req !== null; req = this.requests.next() as OnDemandRequest | null) {
             if (req.archive == archive && req.file == file) {
@@ -417,6 +417,66 @@ export default class OnDemand extends OnDemandProvider {
     }
 
     async handleExtras() {
+        while (this.importantCount === 0 && this.requestCount < 10) {
+            if (this.topPriority === 0) {
+                return;
+            }
+
+            let extra = this.prefetches.pop() as OnDemandRequest | null;
+            while (extra !== null) {
+                if (this.priorities[extra.archive][extra.file] != 0) {
+                    this.priorities[extra.archive][extra.file] = 0;
+                    this.pending.push(extra);
+                    await this.send(extra);
+                    this.active = true;
+
+                    if (this.loadedPrefetchFiles < this.totalPrefetchFiles) {
+                        this.loadedPrefetchFiles++;
+                    }
+
+                    this.message = 'Loading extra files - ' + ((this.loadedPrefetchFiles * 100 / this.totalPrefetchFiles) | 0) + '%';
+                    this.requestCount++;
+
+                    if (this.requestCount == 10) {
+                        return;
+                    }
+                }
+
+                extra = this.prefetches.pop() as OnDemandRequest | null;
+            }
+
+            for (let archive = 0; archive < 4; archive++) {
+                const priorities = this.priorities[archive];
+                const count = priorities.length;
+
+                for (let i = 0; i < count; i++) {
+                    if (priorities[i] == this.topPriority) {
+                        priorities[i] = 0;
+
+                        const req = new OnDemandRequest();
+                        req.archive = archive;
+                        req.file = i;
+                        req.urgent = false;
+                        this.pending.push(req);
+                        await this.send(req);
+                        this.active = true;
+
+                        if (this.loadedPrefetchFiles < this.totalPrefetchFiles) {
+                            this.loadedPrefetchFiles++;
+                        }
+
+                        this.message = 'Loading extra files - ' + ((this.loadedPrefetchFiles * 100 / this.totalPrefetchFiles) | 0) + '%';
+                        this.requestCount++;
+
+                        if (this.requestCount == 10) {
+                            return;
+                        }
+                    }
+                }
+            }
+
+            this.topPriority--;
+        }
     }
 
     async read() {
@@ -483,7 +543,7 @@ export default class OnDemand extends OnDemandProvider {
                 }
             }
 
-			if (this.partAvailable > 0 && available >= this.partAvailable) {
+            if (this.partAvailable > 0 && available >= this.partAvailable) {
                 this.active = true;
 
                 let dst = this.buf;

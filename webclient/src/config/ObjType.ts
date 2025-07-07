@@ -371,7 +371,7 @@ export default class ObjType extends ConfigType {
         if (ObjType.iconCache && outlineRgb === 0) {
             let icon: Pix32 | null = ObjType.iconCache.get(BigInt(id)) as Pix32 | null;
 
-            if (icon && icon.cropH !== count && icon.cropH !== -1) {
+            if (icon && icon.height !== count && icon.height !== -1) {
                 icon.unlink();
                 icon = null;
             }
@@ -493,13 +493,13 @@ export default class ObjType extends ConfigType {
         }
 
         if (linkedIcon && obj.certtemplate !== -1) {
-            const w: number = linkedIcon.cropW;
-            const h: number = linkedIcon.cropH;
-            linkedIcon.cropW = 32;
-            linkedIcon.cropH = 32;
+            const w: number = linkedIcon.width;
+            const h: number = linkedIcon.height;
+            linkedIcon.width = 32;
+            linkedIcon.height = 32;
             linkedIcon.draw(0, 0);
-            linkedIcon.cropW = w;
-            linkedIcon.cropH = h;
+            linkedIcon.width = w;
+            linkedIcon.height = h;
         }
 
         if (ObjType.iconCache && outlineRgb === 0) {
@@ -514,12 +514,12 @@ export default class ObjType extends ConfigType {
         Pix3D.jagged = true;
 
         if (obj.stackable) {
-            icon.cropW = 33;
+            icon.width = 33;
         } else {
-            icon.cropW = 32;
+            icon.width = 32;
         }
 
-        icon.cropH = count;
+        icon.height = count;
         return icon;
     }
 

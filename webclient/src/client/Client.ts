@@ -914,7 +914,7 @@ export class Client extends GameShell {
                                         icon.draw(slotX, slotY);
                                     }
 
-                                    if (icon.cropW === 33 || child.invSlotObjCount[slot] !== 1) {
+                                    if (icon.width === 33 || child.invSlotObjCount[slot] !== 1) {
                                         const count: number = child.invSlotObjCount[slot];
                                         this.fontPlain11?.drawString(slotX + dx + 1, slotY + 10 + dy, this.formatObjCount(count), Colors.BLACK);
                                         this.fontPlain11?.drawString(slotX + dx, slotY + 9 + dy, this.formatObjCount(count), Colors.YELLOW);
@@ -1509,7 +1509,7 @@ export class Client extends GameShell {
             while (this.onDemand.remaining() > 0) {
                 const progress = animCount - this.onDemand.remaining();
                 if (progress > 0) {
-                    await this.drawProgress(65, 'Loading animations - ' + (progress * 100 / animCount) + '%');
+                    await this.drawProgress(65, 'Loading animations - ' + ((progress * 100 / animCount) | 0) + '%');
                 }
 
                 await this.updateOnDemand();
@@ -1530,7 +1530,7 @@ export class Client extends GameShell {
             while (this.onDemand.remaining() > 0) {
                 const progress = modelPrefetch - this.onDemand.remaining();
                 if (progress > 0) {
-                    await this.drawProgress(70, 'Loading models - ' + (progress * 100 / modelPrefetch) + '%');
+                    await this.drawProgress(70, 'Loading models - ' + ((progress * 100 / modelPrefetch) | 0) + '%');
                 }
 
                 await this.updateOnDemand();
@@ -1562,7 +1562,7 @@ export class Client extends GameShell {
                 while (this.onDemand.remaining() > 0) {
                     const progress = mapPrefetch - this.onDemand.remaining();
                     if (progress > 0) {
-                        await this.drawProgress(75, 'Loading maps - ' + (progress * 100 / mapPrefetch) + '%');
+                        await this.drawProgress(75, 'Loading maps - ' + ((progress * 100 / mapPrefetch) | 0) + '%');
                     }
 
                     await this.updateOnDemand();
@@ -1709,39 +1709,39 @@ export class Client extends GameShell {
             }
 
             const backleft1: Pix32 = Pix32.fromArchive(media, 'backleft1', 0);
-            this.areaBackleft1 = new PixMap(backleft1.width2d, backleft1.height2d);
+            this.areaBackleft1 = new PixMap(backleft1.cropRight, backleft1.cropBottom);
             backleft1.blitOpaque(0, 0);
 
             const backleft2: Pix32 = Pix32.fromArchive(media, 'backleft2', 0);
-            this.areaBackleft2 = new PixMap(backleft2.width2d, backleft2.height2d);
+            this.areaBackleft2 = new PixMap(backleft2.cropRight, backleft2.cropBottom);
             backleft2.blitOpaque(0, 0);
 
             const backright1: Pix32 = Pix32.fromArchive(media, 'backright1', 0);
-            this.areaBackright1 = new PixMap(backright1.width2d, backright1.height2d);
+            this.areaBackright1 = new PixMap(backright1.cropRight, backright1.cropBottom);
             backright1.blitOpaque(0, 0);
 
             const backright2: Pix32 = Pix32.fromArchive(media, 'backright2', 0);
-            this.areaBackright2 = new PixMap(backright2.width2d, backright2.height2d);
+            this.areaBackright2 = new PixMap(backright2.cropRight, backright2.cropBottom);
             backright2.blitOpaque(0, 0);
 
             const backtop1: Pix32 = Pix32.fromArchive(media, 'backtop1', 0);
-            this.areaBacktop1 = new PixMap(backtop1.width2d, backtop1.height2d);
+            this.areaBacktop1 = new PixMap(backtop1.cropRight, backtop1.cropBottom);
             backtop1.blitOpaque(0, 0);
 
             const backvmid1: Pix32 = Pix32.fromArchive(media, 'backvmid1', 0);
-            this.areaBackvmid1 = new PixMap(backvmid1.width2d, backvmid1.height2d);
+            this.areaBackvmid1 = new PixMap(backvmid1.cropRight, backvmid1.cropBottom);
             backvmid1.blitOpaque(0, 0);
 
             const backvmid2: Pix32 = Pix32.fromArchive(media, 'backvmid2', 0);
-            this.areaBackvmid2 = new PixMap(backvmid2.width2d, backvmid2.height2d);
+            this.areaBackvmid2 = new PixMap(backvmid2.cropRight, backvmid2.cropBottom);
             backvmid2.blitOpaque(0, 0);
 
             const backvmid3: Pix32 = Pix32.fromArchive(media, 'backvmid3', 0);
-            this.areaBackvmid3 = new PixMap(backvmid3.width2d, backvmid3.height2d);
+            this.areaBackvmid3 = new PixMap(backvmid3.cropRight, backvmid3.cropBottom);
             backvmid3.blitOpaque(0, 0);
 
             const backhmid2: Pix32 = Pix32.fromArchive(media, 'backhmid2', 0);
-            this.areaBackhmid2 = new PixMap(backhmid2.width2d, backhmid2.height2d);
+            this.areaBackhmid2 = new PixMap(backhmid2.cropRight, backhmid2.cropBottom);
             backhmid2.blitOpaque(0, 0);
 
             const randR: number = ((Math.random() * 21.0) | 0) - 10;
@@ -2054,7 +2054,7 @@ export class Client extends GameShell {
 
         const logo: Pix32 = Pix32.fromArchive(this.jagTitle, 'logo');
         this.imageTitle2?.bind();
-        logo.draw(((this.width / 2) | 0) - ((logo.width2d / 2) | 0) - 128, 18);
+        logo.draw(((this.width / 2) | 0) - ((logo.cropRight / 2) | 0) - 128, 18);
     }
 
     private updateFlameBuffer(image: Pix8 | null): void {
@@ -2294,13 +2294,17 @@ export class Client extends GameShell {
         const h: number = 200;
 
         if (this.titleScreenState === 0) {
-            let x: number = ((w / 2) | 0) + 80;
+            const extraY: number = ((h / 2) | 0) + 80;
             let y: number = ((h / 2) | 0) - 20;
-            this.fontPlain11?.drawStringTaggableCenter(w / 2, x, 'ondemand', 0x75a9a9, true);
+
+            if (this.onDemand) {
+                this.fontPlain11?.drawStringTaggableCenter(w / 2, extraY, this.onDemand.message, 0x75a9a9, true);
+            }
+
             this.fontBold12?.drawStringTaggableCenter(w / 2, y, 'Welcome to RuneScape', Colors.YELLOW, true);
             y += 30;
 
-            x = ((w / 2) | 0) - 80;
+            let x = ((w / 2) | 0) - 80;
             y = ((h / 2) | 0) + 20;
             this.imageTitlebutton?.draw(x - 73, y - 20);
             this.fontBold12?.drawStringTaggableCenter(x, y + 5, 'New user', Colors.WHITE, true);
@@ -4233,18 +4237,18 @@ export class Client extends GameShell {
             return;
         }
 
-        const angle = this.orbitCameraYaw + this.macroMinimapAngle & 0x7FF;
+        const angle: number = (this.orbitCameraYaw + this.macroMinimapAngle) & 0x7ff;
 
-        let sinAngle = Pix3D.sin[angle];
-        let cosAngle = Pix3D.cos[angle];
+        let sinAngle: number = Pix3D.sin[angle];
+        let cosAngle: number = Pix3D.cos[angle];
 
         sinAngle = ((sinAngle * 256) / (this.macroMinimapZoom + 256)) | 0;
         cosAngle = ((cosAngle * 256) / (this.macroMinimapZoom + 256)) | 0;
 
-        const x = (dx * cosAngle + dy * sinAngle) >> 16;
-        const y = (dy * cosAngle - dx * sinAngle) >> 16;
+        const x: number = (dy * sinAngle + dx * cosAngle) >> 16;
+        const y: number = (dy * cosAngle - dx * sinAngle) >> 16;
 
-        const var13 = Math.atan2(x, y) | 0;
+        const var13 = Math.atan2(x, y);
         const var15 = (Math.sin(var13) * 63.0) | 0;
         const var16 = (Math.cos(var13) * 57.0) | 0;
 
@@ -4256,11 +4260,12 @@ export class Client extends GameShell {
             return;
         }
 
-        const angle: number = (this.orbitCameraYaw + this.macroMinimapAngle) & 0x7ff;
         const distance: number = dx * dx + dy * dy;
         if (distance > 6400) {
             return;
         }
+
+        const angle: number = (this.orbitCameraYaw + this.macroMinimapAngle) & 0x7ff;
 
         let sinAngle: number = Pix3D.sin[angle];
         let cosAngle: number = Pix3D.cos[angle];
@@ -4272,9 +4277,9 @@ export class Client extends GameShell {
         const y: number = (dy * cosAngle - dx * sinAngle) >> 16;
 
         if (distance > 2500 && this.imageMapback) {
-            image.drawMasked(x + 94 - ((image.cropW / 2) | 0) + 4, 83 - y - ((image.cropH / 2) | 0) - 4, this.imageMapback);
+            image.drawMasked(x + 94 - ((image.width / 2) | 0) + 4, 83 - y - ((image.height / 2) | 0) - 4, this.imageMapback);
         } else {
-            image.draw(x + 94 - ((image.cropW / 2) | 0) + 4, 83 - y - ((image.cropH / 2) | 0) - 4);
+            image.draw(x + 94 - ((image.width / 2) | 0) + 4, 83 - y - ((image.height / 2) | 0) - 4);
         }
     }
 
