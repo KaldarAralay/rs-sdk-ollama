@@ -10816,7 +10816,7 @@ export class Client extends GameShell {
                     this.redrawSidebar = true;
 
                     if (this.chatInterfaceId !== -1) {
-                        this.redrawChatback;
+                        this.redrawChatback = true;
                     }
                 }
             } else if (req.archive === 1) {
