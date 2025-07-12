@@ -10,7 +10,7 @@ mes("You flip the book open to the introduction and start reading.");
 @open_elemental_workshop_shield_book;
 
 [opheldu,elemental_workshop_shield_book]
-if(testbit(%elemental_workshop_bits, ^elemental_workshop_read_book) = ^true & inv_total(inv, elemental_workshop_key) = 0 & last_useitem = knife) { 
+if(testbit(%elemental_workshop_bits, ^elemental_workshop_read_book) = ^true & inv_total(inv, elemental_workshop_key) = 0 & (last_useitem = knife | oc_param(last_useitem, slashattack_anim) ! human_unarmedpunch)) { 
     mes("You make a small cut in the spine of the book.");
     // https://web.archive.org/web/20041214093302im_/http://img.photobucket.com/albums/v289/MrFlibble/ScreenHunter_038.bmp
     mes("Inside you find a small old battered key.");
