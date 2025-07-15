@@ -1882,10 +1882,14 @@ export class Client extends GameShell {
                 this.mouseClickButton = 0;
             }
 
-            this.handleMouseInput();
-            this.handleMinimapInput();
-            this.handleTabInput();
-            this.handleChatModeInput();
+            const checkClickInput = !this.isMobile || (this.isMobile && !MobileKeyboard.isWithinCanvasKeyboard(this.mouseClickX, this.mouseClickY));
+
+            if (checkClickInput) {
+                this.handleMouseInput();
+                this.handleMinimapInput();
+                this.handleTabInput();
+                this.handleChatModeInput();
+            }
 
             if (this.mouseButton === 1 || this.mouseClickButton === 1) {
                 this.dragCycles++;
@@ -11317,6 +11321,10 @@ export class Client extends GameShell {
         }
 
         this.imageTitle1?.draw(637, 0);
+
+        if (this.isMobile) {
+            MobileKeyboard.draw();
+        }
     }
 
     private mix(src: number, alpha: number, dst: number): number {
