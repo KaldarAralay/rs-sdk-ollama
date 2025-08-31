@@ -24,8 +24,8 @@ export default abstract class GameShell {
     public mouseX: number = -1;
     public mouseY: number = -1;
     protected nextMouseClickButton: number = 0;
-    protected nextMouseClickX: number = 0;
-    protected nextMouseClickY: number = 0;
+    protected nextMouseClickX: number = -1;
+    protected nextMouseClickY: number = -1;
     public mouseClickButton: number = 0;
     public mouseClickX: number = -1;
     public mouseClickY: number = -1;
@@ -126,7 +126,7 @@ export default abstract class GameShell {
         canvas.onpointermove = this.onpointermove.bind(this);
 
         if (this.isTouchDevice) {
-            if ('ontouchstart' in window) {
+            if (this.hasTouchEvents) {
                 canvas.ontouchstart = this.ontouchstart.bind(this);
             } else {
                 // edge case: we can't control canvas touch action behavior to allow zooming
@@ -588,10 +588,7 @@ export default abstract class GameShell {
             this.ny = e.screenY | 0;
 
             if (this.dragging) {
-                this.nextMouseClickX = -1;
-                this.nextMouseClickY = -1;
-                this.nextMouseClickButton = 0;
-                this.mouseButton = 1;
+                // no-op
             } else if (MobileKeyboard.isWithinCanvasKeyboard(x, y) && this.exceedsGrabThreshold(20)) {
                 MobileKeyboard.notifyTouchMove(x, y);
             } else if (this.startedInViewport && this.getViewportInterfaceId() === -1 && this.exceedsGrabThreshold(20)) {
@@ -745,13 +742,17 @@ export default abstract class GameShell {
 
     // ----
 
+    private get hasTouchEvents() {
+        return 'ontouchstart' in window;
+    }
+
     private get isTouchDevice() {
-        return (('ontouchstart' in window) ||
+        return (this.hasTouchEvents ||
             (navigator.maxTouchPoints > 0) ||
             ((navigator as any).msMaxTouchPoints > 0));
     }
 
-    private get isMobile(): boolean {
+    protected get isMobile(): boolean {
         if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|Windows Phone|Mobile/i.test(navigator.userAgent)) {
             return true;
         }
