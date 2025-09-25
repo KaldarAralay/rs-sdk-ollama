@@ -10,6 +10,7 @@ iop1=Read
 2dyan=136
 2dxan=276
 name=Battered book
+weight=4oz
 
 [elemental_workshop_key]
 desc=An old battered key.
@@ -23,6 +24,7 @@ members=true
 2dyan=32
 2dxan=344
 name=Battered key
+weight=10g
 
 [elemental_workshop_lava_bowl]
 desc=This is an empty stone bowl.
@@ -39,6 +41,7 @@ recol1d=9513
 recol2s=16705
 recol2d=9513
 name=A stone bowl
+weight=5oz
 
 [elemental_workshop_lava_bowl_full]
 desc=This is a stone bowl full of lava.
@@ -55,6 +58,7 @@ recol1d=9513
 recol2s=16705
 recol2d=25893
 name=A stone bowl
+weight=8oz
 
 [elemental_shield]
 desc=A magic shield.
@@ -71,7 +75,7 @@ cost=20
 name=Elemental shield
 wearpos=lefthand
 category=armour_shield
-weight=226g
+weight=8oz
 param=magicdefence,6
 
 [elemental_workshop_ore]
@@ -88,6 +92,7 @@ tradeable=no
 recol1s=11488
 recol1d=10259
 name=Elemental ore
+weight=5lb
 
 [elemental_workshop_bar]
 desc=It's a bar of refined elemental ore.
@@ -103,3 +108,4 @@ tradeable=no
 recol1s=11488
 recol1d=10259
 name=Elemental metal
+weight=4lb
