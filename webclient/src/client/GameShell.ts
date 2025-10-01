@@ -50,6 +50,7 @@ export default abstract class GameShell {
     // touch controls
     private startedInViewport: boolean = false;
     private startedInTabArea: boolean = false;
+    private startedInChatScroll: boolean = false;
     private ttime: number = -1;
     // start
     private sx: number = 0;
@@ -391,6 +392,7 @@ export default abstract class GameShell {
 
             this.startedInViewport = this.insideViewportArea();
             this.startedInTabArea = this.insideTabArea();
+            this.startedInChatScroll = this.insideChatScrollArea();
         }
     }
 
@@ -609,7 +611,7 @@ export default abstract class GameShell {
                     this.actionKey[3] = 1;
                     this.actionKey[4] = 0;
                 }
-            } else if (this.startedInTabArea || this.getViewportInterfaceId() !== -1) {
+            } else if (this.startedInTabArea || this.startedInChatScroll || this.getViewportInterfaceId() !== -1) {
                 if (!this.dragging && this.exceedsGrabThreshold(5)) {
                     this.dragging = true;
 
@@ -798,6 +800,21 @@ export default abstract class GameShell {
         return (
             this.ingame &&
             (this.isChatBackInputOpen() || this.isShowSocialInput()) &&
+            this.mouseX >= chatInputAreaX1 &&
+            this.mouseX <= chatInputAreaX2 &&
+            this.mouseY >= chatInputAreaY1 &&
+            this.mouseY <= chatInputAreaY2
+        );
+    }
+
+    private insideChatScrollArea() {
+        const chatInputAreaX1: number = 480;
+        const chatInputAreaY1: number = 357;
+        const chatInputAreaX2: number = chatInputAreaX1 + 16;
+        const chatInputAreaY2: number = chatInputAreaY1 + 77;
+        return (
+            this.ingame &&
+            (!this.isChatBackInputOpen() && !this.isShowSocialInput()) &&
             this.mouseX >= chatInputAreaX1 &&
             this.mouseX <= chatInputAreaX2 &&
             this.mouseY >= chatInputAreaY1 &&
