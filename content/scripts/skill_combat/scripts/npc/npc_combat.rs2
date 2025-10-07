@@ -192,7 +192,7 @@ if (npc_type = priestperilguarddog) {
         return (false);
     }
     mes("Your spells do not seem to affect it.");
-    return(~priestperilguarddog_attack);
+    return(false);
 }
 if (npc_type = grip) {
     return(~grip_attack);
