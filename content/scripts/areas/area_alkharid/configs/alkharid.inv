@@ -88,4 +88,20 @@ stock4=amulet_mould,2,100
 stock5=needle,3,100
 stock6=thread,100,5
 stock7=holy_symbol_mould,3,100
-stock8=holy_symbol_mould,6,15
+stock8=sickle_mould,6,15
+
+[craftingshop2_free]
+// https://classic.runescape.wiki/w/Dommik%27s_Crafting_Equipment_Shop
+// https://storage.googleapis.com/tannerdino/images/AlKharid4.png (full stocks)
+scope=shared
+size=40
+restock=yes
+stackall=yes
+allstock=no
+stock1=chisel,2,100
+stock2=ring_mould,4,100
+stock3=necklace_mould,2,100
+stock4=amulet_mould,2,100
+stock5=needle,3,100
+stock6=thread,100,5
+stock7=holy_symbol_mould,3,100
