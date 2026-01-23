@@ -30,11 +30,17 @@ interface SDKSession {
     targetUsername: string;
 }
 
+interface ControllerSession {
+    ws: any;
+    clientId: string;
+}
+
 // ============ Session Maps ============
 
 const botSessions = new Map<string, BotSession>();      // username -> BotSession
 const sdkSessions = new Map<string, SDKSession>();      // sdkClientId -> SDKSession
-const wsToType = new Map<any, { type: 'bot' | 'sdk'; id: string }>();
+const controllerSessions = new Map<string, ControllerSession>();  // clientId -> ControllerSession
+const wsToType = new Map<any, { type: 'bot' | 'sdk' | 'controller'; id: string }>();
 
 // ============ Helper Functions ============
 
@@ -54,6 +60,16 @@ function sendToSDK(session: SDKSession, message: SyncToSDKMessage) {
             session.ws.send(JSON.stringify(message));
         } catch (error) {
             console.error(`[Sync] [${session.sdkClientId}] Failed to send to SDK:`, error);
+        }
+    }
+}
+
+function sendToController(session: ControllerSession, message: any) {
+    if (session.ws) {
+        try {
+            session.ws.send(JSON.stringify(message));
+        } catch (error) {
+            console.error(`[Sync] [${session.clientId}] Failed to send to controller:`, error);
         }
     }
 }
@@ -176,6 +192,18 @@ function handleBotMessage(ws: any, data: string) {
             });
         }
     }
+
+    // Handle screenshot response from bot client
+    if (message.type === 'screenshot_response' && (message as any).dataUrl) {
+        // Forward screenshot to all connected controllers
+        for (const [, controllerSession] of controllerSessions) {
+            sendToController(controllerSession, {
+                type: 'screenshot_response',
+                username: session.username,
+                dataUrl: (message as any).dataUrl
+            });
+        }
+    }
 }
 
 function handleSDKMessage(ws: any, data: string) {
@@ -261,6 +289,47 @@ function handleSDKMessage(ws: any, data: string) {
 
 // ============ WebSocket Handler ============
 
+function handleControllerMessage(ws: any, data: string) {
+    let message: any;
+    try {
+        message = JSON.parse(data);
+    } catch {
+        console.error('[Sync] Invalid JSON from controller');
+        return;
+    }
+
+    // Handle controller connection
+    if (message.type === 'controller_connect') {
+        const clientId = message.clientId || `controller-${Date.now()}`;
+
+        const session: ControllerSession = {
+            ws,
+            clientId
+        };
+
+        controllerSessions.set(clientId, session);
+        wsToType.set(ws, { type: 'controller', id: clientId });
+
+        console.log(`[Sync] Controller connected: ${clientId}`);
+        return;
+    }
+
+    // Handle screenshot request from controller
+    if (message.type === 'screenshot_request') {
+        const { username } = message;
+        if (!username) return;
+
+        const botSession = botSessions.get(username);
+        if (botSession?.ws) {
+            // Forward screenshot request to the bot client
+            sendToBot(botSession, {
+                type: 'screenshot_request'
+            } as any);
+        }
+        return;
+    }
+}
+
 function handleMessage(ws: any, data: string) {
     // Try to determine message type
     let parsed: any;
@@ -274,6 +343,8 @@ function handleMessage(ws: any, data: string) {
     // Route based on message type prefix
     if (parsed.type?.startsWith('sdk_')) {
         handleSDKMessage(ws, data);
+    } else if (parsed.type?.startsWith('controller') || parsed.type === 'screenshot_request') {
+        handleControllerMessage(ws, data);
     } else {
         handleBotMessage(ws, data);
     }
@@ -302,6 +373,12 @@ function handleClose(ws: any) {
         if (session) {
             console.log(`[Sync] SDK disconnected: ${session.sdkClientId}`);
             sdkSessions.delete(wsInfo.id);
+        }
+    } else if (wsInfo.type === 'controller') {
+        const session = controllerSessions.get(wsInfo.id);
+        if (session) {
+            console.log(`[Sync] Controller disconnected: ${session.clientId}`);
+            controllerSessions.delete(wsInfo.id);
         }
     }
 

@@ -172,9 +172,14 @@
                 updateUrlWithBot(newUsername);
             }
 
-            // Load password from localStorage (password can still be cached)
+            // Load password from URL ?password= param or localStorage
+            const urlPassword = urlParams.get('password');
             const savedPass = localStorage.getItem('bot_password');
-            if (savedPass) document.getElementById('bot-password').value = savedPass;
+            if (urlPassword) {
+                document.getElementById('bot-password').value = urlPassword;
+            } else if (savedPass) {
+                document.getElementById('bot-password').value = savedPass;
+            }
 
             // Load goal from URL ?goal= param
             const botGoal = urlParams.get('goal');
@@ -184,6 +189,54 @@
             // Store goal for later if client not ready yet
             if (botGoal) {
                 window.pendingGoal = botGoal;
+            }
+
+            // Store URL params for auto-initialization after client loads
+            window.urlParams = {
+                password: urlPassword,
+                agentMode: urlParams.get('agentMode') === 'true',
+                fps: urlParams.has('fps') ? parseInt(urlParams.get('fps'), 10) : null
+            };
+        }
+
+        // Auto-initialize based on URL params (called after client is ready)
+        async function autoInitFromUrlParams() {
+            const params = window.urlParams;
+            if (!params) return;
+
+            const client = window.gameClient;
+            if (!client) return;
+
+            // If password param provided, auto-login
+            if (params.password) {
+                const username = document.getElementById('bot-username').value;
+                document.getElementById('bot-status').textContent = 'Auto-logging in as ' + username + '...';
+
+                // Wait for autoLogin to be available
+                while (!client.autoLogin) {
+                    await new Promise(r => setTimeout(r, 100));
+                }
+
+                await client.autoLogin(username, params.password);
+                document.getElementById('bot-status').textContent = 'Logged in as ' + username;
+
+                // Wait for ingame state
+                while (!client.ingame) {
+                    await new Promise(r => setTimeout(r, 100));
+                }
+
+                // Set FPS if specified
+                if (params.fps && client.setTargetedFramerate) {
+                    client.setTargetedFramerate(params.fps);
+                    console.log('[Bot] Set FPS to', params.fps);
+                }
+
+                // Enable agent mode if specified
+                if (params.agentMode && client.enableAgentMode) {
+                    client.enableAgentMode();
+                    document.getElementById('bot-status').textContent = 'Agent mode enabled';
+                    console.log('[Bot] Agent mode enabled');
+                }
             }
         }
 
@@ -300,6 +353,8 @@
         (() => {
             clientInstance = new Client(<%= nodeid %>, <%= lowmem %>, <%= members %>);
             window.gameClient = clientInstance;
+            // Auto-initialize from URL params (login, agentMode, fps)
+            autoInitFromUrlParams();
         })();
 
         // Generate a short random username (keep it very short)

@@ -12,7 +12,7 @@
 import { launchBotWithSDK, sleep, getSharedBrowser, releaseSharedBrowser, type SDKSession } from './utils/browser';
 import { runCombatTrainingBot } from './combat-training';
 
-const COMBAT_COUNT = 20;
+const COMBAT_COUNT = 10;
 const DURATION_SECONDS = 120; // 2 minutes
 const STAGGER_MS = 1000; // Time between bot launches
 

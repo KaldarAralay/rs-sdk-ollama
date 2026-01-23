@@ -1,25 +1,16 @@
 #!/usr/bin/env bun
-// Agent Controller Service - Manages rsbot-agent process and provides WebSocket API
-// Allows UI to start/stop agent, send messages, and view action logs
+// Agent Controller Service - Routes between UI and Agent Service
+// This is a thin router that forwards commands to rsbot-agent-sdk.ts
 
-import { spawn, type Subprocess } from 'bun';
-import { join } from 'path';
-
-// Prevent unhandled AbortError from crashing the process when child process streams close
-process.on('unhandledRejection', (reason: any) => {
-    if (reason?.name === 'AbortError') {
-        // Expected when child process exits while we're reading its streams
-        return;
-    }
-    console.error('[Controller] Unhandled rejection:', reason);
-});
+import { RunRecorder, type RunEvent } from './run-recorder';
 
 const CONTROLLER_PORT = parseInt(process.env.CONTROLLER_PORT || '7781');
-const AGENT_DIR = import.meta.dir;
+const AGENT_SERVICE_PORT = parseInt(process.env.AGENT_SERVICE_PORT || '7782');
+const SYNC_PORT = parseInt(process.env.AGENT_PORT || '7780');
 
 interface ActionLogEntry {
     timestamp: number;
-    type: 'thinking' | 'action' | 'result' | 'error' | 'system' | 'user_message' | 'todo';
+    type: 'thinking' | 'action' | 'result' | 'error' | 'system' | 'user_message' | 'code' | 'state';
     content: string;
 }
 
@@ -31,22 +22,27 @@ interface AgentState {
     actionLog: ActionLogEntry[];
 }
 
-// Per-bot agent tracking
-interface BotAgentSession {
+// Per-bot session tracking (UI state only - agent service manages actual sessions)
+interface BotSession {
     state: AgentState;
-    process: Subprocess | null;
-    outputBuffer: string;
     uiClients: Set<any>;
+    recorder: RunRecorder | null;  // Run recorder for this session
 }
 
-// Map of username -> bot session
-const botSessions = new Map<string, BotAgentSession>();
-
-// Map WebSocket -> username for routing
+const botSessions = new Map<string, BotSession>();
 const wsToUsername = new Map<any, string>();
 
-// Get or create session for a bot username
-function getOrCreateSession(username: string): BotAgentSession {
+// Connection to agent service
+let agentServiceWs: WebSocket | null = null;
+let agentServiceConnected = false;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+// Connection to sync service for screenshots
+let syncServiceWs: WebSocket | null = null;
+let syncServiceConnected = false;
+let syncReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+function getOrCreateSession(username: string): BotSession {
     let session = botSessions.get(username);
     if (!session) {
         session = {
@@ -57,16 +53,14 @@ function getOrCreateSession(username: string): BotAgentSession {
                 startedAt: null,
                 actionLog: []
             },
-            process: null,
-            outputBuffer: '',
-            uiClients: new Set()
+            uiClients: new Set(),
+            recorder: null
         };
         botSessions.set(username, session);
     }
     return session;
 }
 
-// Broadcast to all UI clients for a specific bot
 function broadcastToBot(username: string, message: any) {
     const session = botSessions.get(username);
     if (!session) return;
@@ -81,7 +75,6 @@ function broadcastToBot(username: string, message: any) {
     }
 }
 
-// Add to action log and broadcast for a specific bot
 function addLogEntryForBot(username: string, type: ActionLogEntry['type'], content: string) {
     const session = getOrCreateSession(username);
     const entry: ActionLogEntry = {
@@ -97,77 +90,264 @@ function addLogEntryForBot(username: string, type: ActionLogEntry['type'], conte
     }
 
     broadcastToBot(username, { type: 'log', entry });
+
+    // Log to run recorder if recording
+    if (session.recorder?.isRecording()) {
+        session.recorder.logEvent({
+            timestamp: entry.timestamp,
+            type: entry.type as RunEvent['type'],
+            content: entry.content
+        });
+    }
 }
 
-// Parse agent output and extract meaningful parts for a specific bot
-function parseAgentOutputForBot(username: string, chunk: string) {
+// ============ Agent Service Connection ============
+
+function connectToAgentService() {
+    if (agentServiceWs && agentServiceWs.readyState === WebSocket.OPEN) {
+        return;
+    }
+
+    console.log(`[Controller] Connecting to agent service at ws://localhost:${AGENT_SERVICE_PORT}...`);
+
+    try {
+        agentServiceWs = new WebSocket(`ws://localhost:${AGENT_SERVICE_PORT}`);
+
+        agentServiceWs.onopen = () => {
+            console.log('[Controller] Connected to agent service');
+            agentServiceConnected = true;
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+            }
+        };
+
+        agentServiceWs.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(String(event.data));
+                handleAgentServiceMessage(msg);
+            } catch (e) {
+                console.error('[Controller] Error parsing agent service message:', e);
+            }
+        };
+
+        agentServiceWs.onclose = () => {
+            console.log('[Controller] Disconnected from agent service');
+            agentServiceConnected = false;
+            agentServiceWs = null;
+            scheduleReconnect();
+        };
+
+        agentServiceWs.onerror = (error) => {
+            console.error('[Controller] Agent service connection error');
+            agentServiceConnected = false;
+        };
+
+    } catch (e) {
+        console.error('[Controller] Failed to connect to agent service:', e);
+        scheduleReconnect();
+    }
+}
+
+function scheduleReconnect() {
+    if (reconnectTimer) return;
+    reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connectToAgentService();
+    }, 3000);
+}
+
+function sendToAgentService(message: object) {
+    if (!agentServiceWs || !agentServiceConnected) {
+        console.log('[Controller] Agent service not connected, cannot send message');
+        return false;
+    }
+    try {
+        agentServiceWs.send(JSON.stringify(message));
+        return true;
+    } catch (e) {
+        console.error('[Controller] Failed to send to agent service:', e);
+        return false;
+    }
+}
+
+function handleAgentServiceMessage(msg: any) {
+    const username = msg.username;
+    if (!username) return;
+
     const session = getOrCreateSession(username);
-    session.outputBuffer += chunk;
-    const lines = session.outputBuffer.split('\n');
-    session.outputBuffer = lines.pop() || ''; // Keep incomplete line in buffer
 
-    for (const line of lines) {
-        if (!line.trim()) continue;
+    // Map agent service message types to log entries
+    switch (msg.type) {
+        case 'thinking':
+            addLogEntryForBot(username, 'thinking', msg.content);
+            break;
 
-        // Parse different output types
-        if (line.startsWith('[Agent] Session started:')) {
-            const sessionId = line.split(': ')[1]?.trim();
-            session.state.sessionId = sessionId || null;
-            addLogEntryForBot(username, 'system', `Session started: ${sessionId}`);
-        } else if (line.startsWith('[Claude]:')) {
-            const content = line.replace('[Claude]:', '').trim();
-            addLogEntryForBot(username, 'thinking', content);
-        } else if (line.startsWith('[Tool]:')) {
-            const content = line.replace('[Tool]:', '').trim();
-            // Use 'todo' type for TodoWrite/TodoRead to highlight in UI
-            if (content === 'TodoWrite' || content === 'TodoRead') {
-                addLogEntryForBot(username, 'todo', content);
-            } else {
-                addLogEntryForBot(username, 'action', content);
+        case 'action':
+            addLogEntryForBot(username, 'action', msg.content);
+            break;
+
+        case 'code':
+            addLogEntryForBot(username, 'code', msg.content);
+            break;
+
+        case 'result':
+            addLogEntryForBot(username, 'result', msg.content);
+            break;
+
+        case 'error':
+            addLogEntryForBot(username, 'error', msg.content);
+            break;
+
+        case 'system':
+            addLogEntryForBot(username, 'system', msg.content);
+            break;
+
+        case 'state':
+            addLogEntryForBot(username, 'state', msg.content);
+            break;
+
+        case 'todos':
+            // Forward todo list updates directly to UI
+            broadcastToBot(username, {
+                type: 'todos',
+                todos: msg.todos
+            });
+            break;
+
+        case 'status':
+            if (msg.status === 'running') {
+                session.state.running = true;
+                broadcastToBot(username, {
+                    type: 'status',
+                    status: 'running',
+                    goal: session.state.goal
+                });
+            } else if (msg.status === 'stopped' || msg.status === 'idle') {
+                session.state.running = false;
+                broadcastToBot(username, {
+                    type: 'status',
+                    status: 'stopped'
+                });
             }
-        } else if (line.startsWith('  >')) {
-            // Command being executed
-            addLogEntryForBot(username, 'action', `$ ${line.replace('  >', '').trim()}`);
-        } else if (line.match(/^\s+\[(x|~| )\]/)) {
-            // Todo item line (e.g., "  [ ] Task name" or "  [x] Done task")
-            addLogEntryForBot(username, 'todo', line.trim());
-        } else if (line.startsWith('[Result]:')) {
-            // Skip the [Result]: prefix, content follows
-        } else if (line.startsWith('[Agent] Task completed')) {
-            addLogEntryForBot(username, 'system', 'Task completed');
-        } else if (line.startsWith('[Final Result]:')) {
-            const content = line.replace('[Final Result]:', '').trim();
-            addLogEntryForBot(username, 'result', content);
-        } else if (line.startsWith('Queued:')) {
-            addLogEntryForBot(username, 'action', line);
-        } else if (line.includes('Success:') || line.includes('Failed:')) {
-            addLogEntryForBot(username, 'result', line.trim());
-        } else if (line.startsWith('Error') || line.startsWith('[Agent] Error')) {
-            addLogEntryForBot(username, 'error', line);
-        } else if (!line.startsWith('===') && !line.startsWith('Goal:') && !line.startsWith('Checking')) {
-            // Other output (probably command results)
-            if (line.trim().length > 0 && line.trim().length < 200) {
-                // Short lines might be status updates
+            break;
+    }
+}
+
+// ============ Sync Service Connection (for screenshots) ============
+
+function connectToSyncService() {
+    if (syncServiceWs && syncServiceWs.readyState === WebSocket.OPEN) {
+        return;
+    }
+
+    console.log(`[Controller] Connecting to sync service at ws://localhost:${SYNC_PORT}...`);
+
+    try {
+        syncServiceWs = new WebSocket(`ws://localhost:${SYNC_PORT}`);
+
+        syncServiceWs.onopen = () => {
+            console.log('[Controller] Connected to sync service');
+            syncServiceConnected = true;
+            // Register as a controller client
+            syncServiceWs?.send(JSON.stringify({
+                type: 'controller_connect',
+                clientId: 'agent-controller'
+            }));
+            if (syncReconnectTimer) {
+                clearTimeout(syncReconnectTimer);
+                syncReconnectTimer = null;
             }
+        };
+
+        syncServiceWs.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(String(event.data));
+                handleSyncServiceMessage(msg);
+            } catch (e) {
+                console.error('[Controller] Error parsing sync service message:', e);
+            }
+        };
+
+        syncServiceWs.onclose = () => {
+            console.log('[Controller] Disconnected from sync service');
+            syncServiceConnected = false;
+            syncServiceWs = null;
+            scheduleSyncReconnect();
+        };
+
+        syncServiceWs.onerror = () => {
+            console.error('[Controller] Sync service connection error');
+            syncServiceConnected = false;
+        };
+
+    } catch (e) {
+        console.error('[Controller] Failed to connect to sync service:', e);
+        scheduleSyncReconnect();
+    }
+}
+
+function scheduleSyncReconnect() {
+    if (syncReconnectTimer) return;
+    syncReconnectTimer = setTimeout(() => {
+        syncReconnectTimer = null;
+        connectToSyncService();
+    }, 3000);
+}
+
+function sendToSyncService(message: object) {
+    if (!syncServiceWs || !syncServiceConnected) {
+        return false;
+    }
+    try {
+        syncServiceWs.send(JSON.stringify(message));
+        return true;
+    } catch (e) {
+        console.error('[Controller] Failed to send to sync service:', e);
+        return false;
+    }
+}
+
+function requestScreenshot(username: string) {
+    sendToSyncService({
+        type: 'screenshot_request',
+        username
+    });
+}
+
+function handleSyncServiceMessage(msg: any) {
+    // Handle screenshot response
+    if (msg.type === 'screenshot_response') {
+        const { username, dataUrl } = msg;
+        if (!username || !dataUrl) return;
+
+        const session = botSessions.get(username);
+        if (session?.recorder?.isRecording()) {
+            session.recorder.saveScreenshot(dataUrl);
         }
     }
 }
 
-// Start the agent with a goal for a specific bot
-async function startAgentForBot(username: string, goal: string) {
+// ============ Bot Agent Control Functions ============
+
+function startAgentForBot(username: string, goal: string) {
     console.log(`[Controller] [${username}] startAgent called with goal: ${goal}`);
 
     const session = getOrCreateSession(username);
-
-    if (session.process) {
-        await stopAgentForBot(username);
-    }
-
-    session.state.running = true;
     session.state.goal = goal;
     session.state.startedAt = Date.now();
     session.state.actionLog = [];
-    session.outputBuffer = '';
+    session.state.running = true;
+
+    // Stop any existing recording and start fresh
+    if (session.recorder?.isRecording()) {
+        session.recorder.stopRun();
+    }
+
+    // Start new recording
+    session.recorder = new RunRecorder();
+    const screenshotCallback = () => requestScreenshot(username);
+    session.recorder.startRun(username, goal, screenshotCallback);
 
     addLogEntryForBot(username, 'system', `Starting agent with goal: ${goal}`);
 
@@ -177,129 +357,43 @@ async function startAgentForBot(username: string, goal: string) {
         goal
     });
 
-    // State directory for this bot - agent will run from here
-    const botStateDir = join(AGENT_DIR, 'agent-state', username);
-
-    // Ensure state directory exists and has rsbot symlink
-    const { mkdirSync, existsSync, symlinkSync, unlinkSync } = await import('fs');
-    if (!existsSync(botStateDir)) {
-        mkdirSync(botStateDir, { recursive: true });
-    }
-
-    // Create/update symlink to rsbot in state directory so ./rsbot works
-    const rsbotLink = join(botStateDir, 'rsbot');
-    const rsbotTarget = join(AGENT_DIR, 'rsbot');
-    try {
-        if (existsSync(rsbotLink)) unlinkSync(rsbotLink);
-        symlinkSync(rsbotTarget, rsbotLink);
-    } catch (e) {
-        console.error(`[Controller] [${username}] Failed to create rsbot symlink:`, e);
-    }
-
-    session.process = spawn({
-        cmd: ['bun', 'run', join(AGENT_DIR, 'rsbot-agent.ts'), goal],
-        cwd: botStateDir,  // Run from bot's state directory so rsbot uses correct state
-        stdin: 'ignore',
-        stdout: 'pipe',
-        stderr: 'pipe',
-        env: {
-            ...process.env,
-            FORCE_COLOR: '0', // Disable colors for easier parsing
-            PATH: `${AGENT_DIR}:${process.env.PATH}` // Add agent dir to PATH so 'rsbot' command works
-        }
+    // Send start command to agent service
+    const sent = sendToAgentService({
+        type: 'start',
+        username,
+        goal
     });
 
-    const agentProcess = session.process;
-    const stdout = agentProcess.stdout;
-    const stderr = agentProcess.stderr;
-
-    // Read stdout
-    if (stdout && typeof stdout !== 'number') {
-        (async () => {
-            const reader = stdout.getReader();
-            const decoder = new TextDecoder();
-            try {
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    const text = decoder.decode(value);
-                    parseAgentOutputForBot(username, text);
-                }
-            } catch (e: unknown) {
-                // Process ended or stream closed - this is expected
-                const err = e as { name?: string; message?: string };
-                if (err?.name !== 'AbortError') {
-                    console.error(`[Controller] [${username}] stdout reader error:`, err?.message || e);
-                }
-            }
-        })().catch(() => {}); // Ensure unhandled rejections don't crash
-    }
-
-    // Read stderr
-    if (stderr && typeof stderr !== 'number') {
-        (async () => {
-            const reader = stderr.getReader();
-            const decoder = new TextDecoder();
-            try {
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    const text = decoder.decode(value);
-                    if (text.trim()) {
-                        addLogEntryForBot(username, 'error', text.trim());
-                    }
-                }
-            } catch (e: unknown) {
-                // Process ended or stream closed - this is expected
-                const err = e as { name?: string; message?: string };
-                if (err?.name !== 'AbortError') {
-                    console.error(`[Controller] [${username}] stderr reader error:`, err?.message || e);
-                }
-            }
-        })().catch(() => {}); // Ensure unhandled rejections don't crash
-    }
-
-    console.log(`[Controller] [${username}] Spawned agent process in ${botStateDir}, pid: ${agentProcess.pid}`);
-
-    // Wait for process to complete
-    agentProcess.exited.then((code) => {
-        console.log(`[Controller] [${username}] Agent process exited with code: ${code}`);
+    if (!sent) {
+        addLogEntryForBot(username, 'error', 'Agent service not available. Make sure rsbot-agent-sdk.ts is running.');
         session.state.running = false;
-        session.process = null;
-
-        if (code === 0) {
-            addLogEntryForBot(username, 'system', 'Agent completed successfully');
-        } else {
-            addLogEntryForBot(username, 'error', `Agent exited with code ${code}`);
+        if (session.recorder?.isRecording()) {
+            session.recorder.stopRun();
         }
-
         broadcastToBot(username, {
             type: 'status',
-            status: 'stopped',
-            exitCode: code
+            status: 'stopped'
         });
-    });
-
-    broadcastToBot(username, {
-        type: 'status',
-        status: 'running',
-        goal,
-        sessionId: session.state.sessionId
-    });
+    }
 }
 
-// Stop the agent for a specific bot
-async function stopAgentForBot(username: string) {
+function stopAgentForBot(username: string) {
     const session = botSessions.get(username);
     if (!session) return;
 
-    if (session.process) {
-        addLogEntryForBot(username, 'system', 'Stopping agent...');
-        session.process.kill();
-        session.process = null;
-    }
+    addLogEntryForBot(username, 'system', 'Stopping agent...');
+
+    sendToAgentService({
+        type: 'stop',
+        username
+    });
 
     session.state.running = false;
+
+    // Stop recording and generate transcript
+    if (session.recorder?.isRecording()) {
+        session.recorder.stopRun();
+    }
 
     broadcastToBot(username, {
         type: 'status',
@@ -307,44 +401,35 @@ async function stopAgentForBot(username: string) {
     });
 }
 
-// Send a message to the agent - queued for next iteration if running
-async function sendMessageForBot(username: string, message: string) {
+function sendMessageForBot(username: string, message: string) {
     const session = getOrCreateSession(username);
-    console.log(`[Controller] [${username}] sendMessageForBot called, running=${session.state.running}, process=${session.process ? 'exists' : 'null'}`);
+    console.log(`[Controller] [${username}] sendMessageForBot called, running=${session.state.running}`);
 
-    // Log the user message first
+    // Log the user message
     addLogEntryForBot(username, 'user_message', message);
 
     if (session.state.running) {
-        // Agent is running - write message to file for next iteration
-        const messageFile = join(AGENT_DIR, 'agent-state', username, 'user-message.json');
-        const { writeFileSync, existsSync } = await import('fs');
-        console.log(`[Controller] [${username}] Writing user message to: ${messageFile}`);
-        try {
-            const userMessage = {
-                message,
-                timestamp: Date.now()
-            };
-            writeFileSync(messageFile, JSON.stringify(userMessage, null, 2));
-            console.log(`[Controller] [${username}] Message file written, exists: ${existsSync(messageFile)}`);
-            addLogEntryForBot(username, 'system', `Message queued for agent (file: ${messageFile})`);
-            broadcastToBot(username, {
-                type: 'message_queued',
-                message
-            });
-        } catch (e) {
-            console.error(`[Controller] [${username}] Failed to write message file:`, e);
-            addLogEntryForBot(username, 'error', `Failed to queue message: ${e}`);
-        }
-        return;
-    }
+        // Send message to running agent
+        const sent = sendToAgentService({
+            type: 'message',
+            username,
+            message
+        });
 
-    // Agent not running - inform user and start agent with the message
-    addLogEntryForBot(username, 'system', 'Agent not running. Starting agent with your message as the goal...');
-    await startAgentForBot(username, message);
+        if (sent) {
+            addLogEntryForBot(username, 'system', 'Message sent to agent');
+        } else {
+            addLogEntryForBot(username, 'error', 'Failed to send message - agent service not available');
+        }
+    } else {
+        // Agent not running - start it with this message as the goal
+        addLogEntryForBot(username, 'system', 'Agent not running. Starting agent with your message...');
+        startAgentForBot(username, message);
+    }
 }
 
-// Handle WebSocket messages from UI
+// ============ UI Message Handler ============
+
 function handleUIMessage(ws: any, data: string) {
     let message;
     try {
@@ -353,7 +438,6 @@ function handleUIMessage(ws: any, data: string) {
         return;
     }
 
-    // Get username from WS mapping (set on open based on query param)
     const username = wsToUsername.get(ws) || 'default';
     const session = getOrCreateSession(username);
 
@@ -394,29 +478,25 @@ function handleUIMessage(ws: any, data: string) {
     }
 }
 
-// Start WebSocket server
-console.log(`[Controller] Starting Agent Controller on port ${CONTROLLER_PORT}...`);
+// ============ WebSocket Server ============
 
-// Store bot username extracted during upgrade for use in open handler
-const pendingUsernames = new Map<Request, string>();
+console.log(`[Controller] Starting Agent Controller on port ${CONTROLLER_PORT}...`);
 
 const server = Bun.serve({
     port: CONTROLLER_PORT,
+
     async fetch(req, server) {
         const url = new URL(req.url);
 
-        // Upgrade WebSocket connections
+        // WebSocket upgrade
         if (req.headers.get('upgrade') === 'websocket') {
-            // Extract bot username from query param
             const botUsername = url.searchParams.get('bot') || 'default';
-            pendingUsernames.set(req, botUsername);
             const upgraded = server.upgrade(req, { data: { botUsername } });
             if (upgraded) return undefined;
-            pendingUsernames.delete(req);
             return new Response('WebSocket upgrade failed', { status: 400 });
         }
 
-        // CORS headers for API
+        // CORS headers
         const corsHeaders = {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -427,11 +507,10 @@ const server = Bun.serve({
             return new Response(null, { headers: corsHeaders });
         }
 
-        // HTTP API endpoints - now support ?bot= query param
         const botUsername = url.searchParams.get('bot') || 'default';
 
+        // HTTP API endpoints
         if (url.pathname === '/status') {
-            // Show all bots or specific bot
             if (botUsername === 'all') {
                 const allBots: Record<string, any> = {};
                 for (const [name, session] of botSessions) {
@@ -443,7 +522,11 @@ const server = Bun.serve({
                         logCount: session.state.actionLog.length
                     };
                 }
-                return new Response(JSON.stringify({ bots: allBots, count: botSessions.size }), {
+                return new Response(JSON.stringify({
+                    bots: allBots,
+                    count: botSessions.size,
+                    agentServiceConnected
+                }), {
                     headers: { 'Content-Type': 'application/json', ...corsHeaders }
                 });
             }
@@ -454,7 +537,8 @@ const server = Bun.serve({
                 sessionId: session.state.sessionId,
                 goal: session.state.goal,
                 startedAt: session.state.startedAt,
-                logCount: session.state.actionLog.length
+                logCount: session.state.actionLog.length,
+                agentServiceConnected
             }), {
                 headers: { 'Content-Type': 'application/json', ...corsHeaders }
             });
@@ -470,7 +554,6 @@ const server = Bun.serve({
         if (url.pathname === '/start' && req.method === 'POST') {
             try {
                 const body = await req.json() as { goal?: string };
-                console.log(`[Controller] [${botUsername}] POST /start received:`, body);
                 if (body.goal) {
                     startAgentForBot(botUsername, body.goal);
                     return new Response(JSON.stringify({ ok: true, bot: botUsername }), {
@@ -483,7 +566,6 @@ const server = Bun.serve({
                     });
                 }
             } catch (err: any) {
-                console.error(`[Controller] [${botUsername}] Error parsing /start request:`, err?.message || err);
                 return new Response(JSON.stringify({ ok: false, error: 'Invalid JSON' }), {
                     status: 400,
                     headers: { 'Content-Type': 'application/json', ...corsHeaders }
@@ -498,13 +580,23 @@ const server = Bun.serve({
             });
         }
 
-        return new Response('Agent Controller API (Multi-Bot)\n\nEndpoints:\n- GET /status?bot=<name>  (or ?bot=all for all bots)\n- GET /log?bot=<name>\n- POST /start?bot=<name> {goal}\n- POST /stop?bot=<name>\n- WebSocket?bot=<name> for real-time updates', {
+        return new Response(`Agent Controller API (Multi-Bot)
+
+Endpoints:
+- GET /status?bot=<name>  (or ?bot=all for all bots)
+- GET /log?bot=<name>
+- POST /start?bot=<name> {goal}
+- POST /stop?bot=<name>
+- WebSocket?bot=<name> for real-time updates
+
+Agent Service: ${agentServiceConnected ? 'Connected' : 'Disconnected'}
+`, {
             headers: { 'Content-Type': 'text/plain', ...corsHeaders }
         });
     },
+
     websocket: {
         open(ws: any) {
-            // Extract username from ws.data set during upgrade
             const botUsername = ws.data?.botUsername || 'default';
             const session = getOrCreateSession(botUsername);
 
@@ -513,15 +605,18 @@ const server = Bun.serve({
 
             console.log(`[Controller] [${botUsername}] UI client connected (${session.uiClients.size} for this bot)`);
 
-            // Send current state for this bot
+            // Send current state
             ws.send(JSON.stringify({
                 type: 'state',
-                ...session.state
+                ...session.state,
+                agentServiceConnected
             }));
         },
+
         message(ws: any, message: any) {
             handleUIMessage(ws, message.toString());
         },
+
         close(ws: any) {
             const username = wsToUsername.get(ws);
             if (username) {
@@ -530,15 +625,13 @@ const server = Bun.serve({
                     session.uiClients.delete(ws);
                     console.log(`[Controller] [${username}] UI client disconnected (${session.uiClients.size} for this bot)`);
 
-                    // Clean up when last client disconnects - stop agent and clear session
-                    // This gives a fresh start on reconnect instead of replaying old logs
+                    // Clean up when last client disconnects
                     if (session.uiClients.size === 0) {
                         if (session.state.running) {
                             stopAgentForBot(username);
-                            console.log(`[Controller] [${username}] Agent stopped (no clients remaining)`);
                         }
                         botSessions.delete(username);
-                        console.log(`[Controller] [${username}] Session cleared (no clients remaining)`);
+                        console.log(`[Controller] [${username}] Session cleared`);
                     }
                 }
                 wsToUsername.delete(ws);
@@ -547,6 +640,12 @@ const server = Bun.serve({
     }
 });
 
+// Connect to agent service and sync service on startup
+connectToAgentService();
+connectToSyncService();
+
 console.log(`[Controller] Agent Controller running at http://localhost:${CONTROLLER_PORT}`);
 console.log(`[Controller] WebSocket endpoint: ws://localhost:${CONTROLLER_PORT}?bot=<username>`);
-console.log('[Controller] Supports multiple bots - each bot identified by ?bot= parameter');
+console.log(`[Controller] Agent service: ws://localhost:${AGENT_SERVICE_PORT}`);
+console.log(`[Controller] Sync service: ws://localhost:${SYNC_PORT}`);
+console.log(`[Controller] Runs recorded to: ./runs/`);

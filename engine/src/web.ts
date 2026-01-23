@@ -32,6 +32,260 @@ MIME_TYPES.set('.html', 'text/html');
 MIME_TYPES.set('.wasm', 'application/wasm');
 MIME_TYPES.set('.sf2', 'application/octet-stream');
 
+// ============ Agent Transcript Renderer ============
+
+interface RunMetadata {
+    runId: string;
+    username: string;
+    goal: string;
+    startTime: number;
+    endTime?: number;
+    eventCount: number;
+    screenshotCount: number;
+}
+
+interface RunEvent {
+    timestamp: number;
+    type: string;
+    content: string;
+    state?: object;
+}
+
+function escapeHtml(text: string): string {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function renderAgentTranscript(runName: string, meta: RunMetadata, events: RunEvent[]): string {
+    const duration = meta.endTime ? ((meta.endTime - meta.startTime) / 1000).toFixed(1) : 'ongoing';
+
+    const renderEvent = (event: RunEvent, index: number): string => {
+        const time = new Date(event.timestamp).toLocaleTimeString('en-US', {
+            hour12: false,
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+
+        let content = escapeHtml(event.content || '');
+        let extraHtml = '';
+
+        if (event.type === 'screenshot') {
+            extraHtml = `<img class="screenshot-thumb" src="/runs/${runName}/screenshots/${event.content}" alt="Screenshot">`;
+            content = '';
+        } else if (event.type === 'code' || event.type === 'result') {
+            // Format JSON results nicely
+            if (event.type === 'result') {
+                try {
+                    const parsed = JSON.parse(event.content);
+                    content = escapeHtml(JSON.stringify(parsed, null, 2));
+                } catch {}
+            }
+            // Make long content collapsible
+            const lines = content.split('\n');
+            if (lines.length > 5) {
+                const id = `code-${index}`;
+                const preview = lines.slice(0, 3).join('\n') + '\n...';
+                // Preview and full are mutually exclusive - toggle swaps between them
+                extraHtml = `
+                    <div id="${id}-preview" class="event-content">${preview}</div>
+                    <div class="code-toggle" onclick="toggleCode('${id}')">
+                        <span class="toggle-icon">▶</span> <span class="toggle-text">Show full (${lines.length} lines)</span>
+                    </div>
+                    <div id="${id}" class="code-full" style="display:none">${content}</div>`;
+                content = ''; // Don't render content separately - it's in extraHtml
+            }
+        } else if (event.type === 'state') {
+            // State delta - show nicely formatted
+            extraHtml = `<div class="state-delta">${content}</div>`;
+            content = '';
+        }
+
+        return `<div class="event ${event.type}">
+            <div class="event-header">
+                <span class="event-type">${event.type}</span>
+                <span class="event-time">${time}</span>
+            </div>
+            ${content ? `<div class="event-content">${content}</div>` : ''}
+            ${extraHtml}
+        </div>`;
+    };
+
+    const eventHtml = events.map((e, i) => renderEvent(e, i)).join('\n');
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Run: ${escapeHtml(meta.goal)}</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.5;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: #5bf; margin-bottom: 10px; font-size: 20px; }
+        .back { color: #5bf; text-decoration: none; font-size: 14px; }
+        .meta {
+            color: #888;
+            margin: 16px 0;
+            padding: 12px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        .timeline { display: flex; flex-direction: column; gap: 8px; }
+        .event {
+            padding: 12px 16px;
+            border-radius: 8px;
+            border-left: 4px solid #555;
+            background: rgba(255,255,255,0.03);
+        }
+        .event.system { border-left-color: #888; }
+        .event.thinking { border-left-color: #66f; background: rgba(100,100,255,0.1); }
+        .event.action { border-left-color: #fa0; background: rgba(255,170,0,0.1); }
+        .event.code { border-left-color: #ff0; background: rgba(40,40,50,0.9); }
+        .event.result { border-left-color: #5f5; background: rgba(100,255,100,0.08); }
+        .event.error { border-left-color: #f55; background: rgba(255,100,100,0.1); }
+        .event.user_message { border-left-color: #5bf; background: rgba(100,200,255,0.1); }
+        .event.screenshot { border-left-color: #f0f; background: rgba(255,100,255,0.08); }
+        .event.state { border-left-color: #0ff; background: rgba(0,255,255,0.08); }
+        .event-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .event-type {
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.1);
+        }
+        .event-time { color: #666; font-size: 12px; font-family: monospace; }
+        .event-content {
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-size: 13px;
+        }
+        .event.code .event-content,
+        .code-full {
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 12px;
+            color: #fd6;
+            white-space: pre-wrap;
+        }
+        .event.result .event-content {
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 12px;
+            color: #8f8;
+        }
+        .state-delta {
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 12px;
+            color: #0ff;
+            white-space: pre-wrap;
+        }
+        .code-toggle {
+            cursor: pointer;
+            color: #888;
+            font-size: 12px;
+            margin-top: 8px;
+            user-select: none;
+        }
+        .code-toggle:hover { color: #aaa; }
+        .toggle-icon { font-size: 10px; }
+        .screenshot-thumb {
+            max-width: 400px;
+            max-height: 300px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+        .screenshot-thumb:hover { opacity: 0.9; }
+        .lightbox {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .lightbox.active { display: flex; }
+        .lightbox img { max-width: 95%; max-height: 95%; }
+        .lightbox-close {
+            position: absolute;
+            top: 20px; right: 30px;
+            color: white;
+            font-size: 30px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/runs" class="back">← Back to runs</a>
+        <h1>${escapeHtml(meta.goal)}</h1>
+        <div class="meta">
+            <span><strong>User:</strong> ${escapeHtml(meta.username)}</span>
+            <span><strong>Duration:</strong> ${duration}s</span>
+            <span><strong>Events:</strong> ${meta.eventCount}</span>
+            <span><strong>Screenshots:</strong> ${meta.screenshotCount}</span>
+        </div>
+        <div class="timeline">${eventHtml}</div>
+    </div>
+    <div class="lightbox" onclick="this.classList.remove('active')">
+        <span class="lightbox-close">&times;</span>
+        <img src="" alt="Screenshot">
+    </div>
+    <script>
+        function toggleCode(id) {
+            const full = document.getElementById(id);
+            const preview = document.getElementById(id + '-preview');
+            const toggle = full.previousElementSibling;
+            const icon = toggle.querySelector('.toggle-icon');
+            const text = toggle.querySelector('.toggle-text');
+            if (full.style.display === 'none') {
+                full.style.display = 'block';
+                preview.style.display = 'none';
+                icon.textContent = '▼';
+                text.textContent = 'Hide code';
+            } else {
+                full.style.display = 'none';
+                preview.style.display = 'block';
+                icon.textContent = '▶';
+                text.textContent = 'Show full';
+            }
+        }
+        document.querySelectorAll('.screenshot-thumb').forEach(img => {
+            img.addEventListener('click', e => {
+                e.stopPropagation();
+                const lb = document.querySelector('.lightbox');
+                lb.querySelector('img').src = img.src;
+                lb.classList.add('active');
+            });
+        });
+    </script>
+</body>
+</html>`;
+}
+
 export type WebSocketData = {
     client: WSClientSocket,
     remoteAddress: string,
@@ -282,6 +536,21 @@ ${runs.length === 0 ? '<div class="empty">No test runs yet</div>' : ''}
                     return new Response('Run not found', { status: 404 });
                 }
 
+                // New format: metadata.json + events.jsonl
+                const metadataPath = path.join(runDir, 'metadata.json');
+                const eventsPath = path.join(runDir, 'events.jsonl');
+
+                if (fs.existsSync(metadataPath) && fs.existsSync(eventsPath)) {
+                    // Render new format transcript dynamically
+                    const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
+                    const eventsRaw = fs.readFileSync(eventsPath, 'utf-8').split('\n').filter(Boolean);
+                    const events = eventsRaw.map(line => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean);
+
+                    const html = renderAgentTranscript(runName, metadata, events);
+                    return new Response(html, { headers: { 'Content-Type': 'text/html' } });
+                }
+
+                // Fall back to old format
                 const summaryPath = path.join(runDir, 'summary.json');
                 const runPath = path.join(runDir, 'run.json');
                 let summary = null;
@@ -415,6 +684,8 @@ ${timelineHtml || '<div>No actions recorded</div>'}
                     let contentType = 'application/octet-stream';
                     if (ext === '.png') contentType = 'image/png';
                     else if (ext === '.json') contentType = 'application/json';
+                    else if (ext === '.jsonl') contentType = 'application/jsonl';
+                    else if (ext === '.html') contentType = 'text/html';
                     return new Response(Bun.file(filePath), {
                         headers: { 'Content-Type': contentType }
                     });
@@ -488,7 +759,7 @@ ${files.length === 0 ? '<p>No screenshots yet</p>' : ''}
             }
         },
         websocket: {
-            maxPayloadLength: 65536,
+            maxPayloadLength: 16 * 1024 * 1024, // 16MB for screenshot responses
             open(ws) {
                 // Handle agent proxy connections
                 if (ws.data.isAgentProxy) {

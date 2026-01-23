@@ -31,6 +31,21 @@ const LIGHTWEIGHT_CHROME_ARGS = [
     '--disable-background-timer-throttling',
     '--disable-ipc-flooding-protection',
     '--js-flags=--max-old-space-size=128',  // Limit JS heap per page
+    // Additional performance flags
+    '--disable-software-rasterizer',
+    '--disable-extensions',
+    '--disable-component-extensions-with-background-pages',
+    '--disable-default-apps',
+    '--disable-hang-monitor',
+    '--disable-popup-blocking',
+    '--disable-prompt-on-repost',
+    '--disable-sync',
+    '--disable-translate',
+    '--metrics-recording-only',
+    '--safebrowsing-disable-auto-update',
+    '--disable-infobars',
+    '--disable-features=TranslateUI',
+    '--disable-features=VizDisplayCompositor',
 ];
 
 /**
@@ -41,7 +56,8 @@ export async function getSharedBrowser(headless: boolean = true): Promise<Browse
     if (!sharedBrowser || !sharedBrowser.connected) {
         sharedBrowser = await puppeteer.launch({
             headless,
-            args: LIGHTWEIGHT_CHROME_ARGS
+            args: LIGHTWEIGHT_CHROME_ARGS,
+            protocolTimeout: 120000,  // 2 minutes for heavy load scenarios
         });
     }
     sharedBrowserRefCount++;
@@ -100,35 +116,18 @@ export async function launchBotBrowser(
     const page = await browser.newPage();
 
     // Optimize page for lower resource usage
-    await page.setViewport({ width: 800, height: 600 });
-    await page.setCacheEnabled(false);  // Reduce memory usage
+    await page.setViewport({ width: 400, height: 300 });  // Minimal viewport
+    page.setDefaultTimeout(60000);  // 60s timeout for all operations
 
-    // Navigate to bot URL with bot name
-    await page.goto(`${BOT_URL}?bot=${name}`, { waitUntil: 'networkidle2' });
+    // Navigate to bot URL with all params - page handles auto-login, fps, etc.
+    await page.goto(`${BOT_URL}?bot=${name}&password=test&fps=5`, { waitUntil: 'networkidle2', timeout: 60000 });
 
-    // Wait for client to be ready for auto-login
+    // Wait for in-game (page auto-logs in via URL params)
     let attempts = 0;
-    while (!await page.evaluate(() => (window as any).gameClient?.autoLogin)) {
-        await sleep(200);
-        attempts++;
-        if (attempts > 50) {
-            await browser.close();
-            throw new Error('Timeout waiting for game client to load');
-        }
-    }
-
-    // Perform auto-login
-    await page.evaluate(
-        (username: string) => (window as any).gameClient.autoLogin(username, 'test'),
-        name
-    );
-
-    // Wait for in-game
-    attempts = 0;
     while (!await page.evaluate(() => (window as any).gameClient?.ingame)) {
         await sleep(200);
         attempts++;
-        if (attempts > 100) {
+        if (attempts > 150) {  // 30 seconds
             await browser.close();
             throw new Error('Timeout waiting for login');
         }

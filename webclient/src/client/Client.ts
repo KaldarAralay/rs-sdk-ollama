@@ -7751,11 +7751,8 @@ export class Client extends GameShell {
                 this.out.p1(bufferSize + bufferSize + 3);
             }
 
-            if (this.actionKey[5] === 1) {
-                this.out.p1(1);
-            } else {
-                this.out.p1(0);
-            }
+            // Always run (previously: this.actionKey[5] === 1)
+            this.out.p1(1);
 
             this.out.p2(startX + this.sceneBaseTileX);
             this.out.p2(startZ + this.sceneBaseTileZ);

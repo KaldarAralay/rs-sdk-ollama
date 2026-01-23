@@ -12,7 +12,8 @@ import type {
     NearbyNpc,
     NearbyLoc,
     GroundItem,
-    DialogState
+    DialogState,
+    ShopItem
 } from './types';
 
 export interface ChopTreeResult {
@@ -374,8 +375,8 @@ export class BotActions {
      * Opens a shop by trading with a shopkeeper NPC.
      * Waits for the shop interface to open.
      */
-    async openShop(npcPattern: string | RegExp = /shop\s*keeper/i): Promise<ActionResult> {
-        const npc = this.sdk.findNearbyNpc(npcPattern);
+    async openShop(target: NearbyNpc | string | RegExp = /shop\s*keeper/i): Promise<ActionResult> {
+        const npc = this.resolveNpc(target);
         if (!npc) {
             return { success: false, message: 'Shopkeeper not found' };
         }
@@ -404,16 +405,15 @@ export class BotActions {
      * Waits for the item to appear in inventory.
      * Fails if item doesn't appear (e.g., no coins, shop out of stock).
      */
-    async buyFromShop(itemPattern: string | RegExp, amount: number = 1): Promise<ShopResult> {
+    async buyFromShop(target: ShopItem | string | RegExp, amount: number = 1): Promise<ShopResult> {
         const shop = this.sdk.getState()?.shop;
         if (!shop?.isOpen) {
             return { success: false, message: 'Shop is not open' };
         }
 
-        const regex = typeof itemPattern === 'string' ? new RegExp(itemPattern, 'i') : itemPattern;
-        const shopItem = shop.shopItems.find(i => regex.test(i.name));
+        const shopItem = this.resolveShopItem(target, shop.shopItems);
         if (!shopItem) {
-            return { success: false, message: `Item not found in shop: ${itemPattern}` };
+            return { success: false, message: `Item not found in shop: ${target}` };
         }
 
         // Track inventory before purchase
@@ -448,19 +448,18 @@ export class BotActions {
     /**
      * Sells an item to an open shop.
      * Waits for the item to leave inventory (or count to decrease).
+     * Accepts InventoryItem, ShopItem (from shop.playerItems), or a pattern.
      */
-    async sellToShop(itemPattern: string | RegExp, amount: number = 1): Promise<ShopResult> {
+    async sellToShop(target: InventoryItem | ShopItem | string | RegExp, amount: number = 1): Promise<ShopResult> {
         const shop = this.sdk.getState()?.shop;
         if (!shop?.isOpen) {
             return { success: false, message: 'Shop is not open' };
         }
 
-        const regex = typeof itemPattern === 'string' ? new RegExp(itemPattern, 'i') : itemPattern;
-
         // Find item in player's shop inventory (items available to sell)
-        const sellItem = shop.playerItems.find(i => regex.test(i.name));
+        const sellItem = this.resolveShopItem(target, shop.playerItems);
         if (!sellItem) {
-            return { success: false, message: `Item not found to sell: ${itemPattern}` };
+            return { success: false, message: `Item not found to sell: ${target}` };
         }
 
         const countBefore = sellItem.count;
@@ -493,10 +492,10 @@ export class BotActions {
      * Equips an item from inventory.
      * Waits for the item to move to equipment slot.
      */
-    async equipItem(itemPattern: string | RegExp): Promise<EquipResult> {
-        const item = this.sdk.findInventoryItem(itemPattern);
+    async equipItem(target: InventoryItem | string | RegExp): Promise<EquipResult> {
+        const item = this.resolveInventoryItem(target, /./);
         if (!item) {
-            return { success: false, message: `Item not found: ${itemPattern}` };
+            return { success: false, message: `Item not found: ${target}` };
         }
 
         // Find "Wield" or "Wear" option
@@ -527,10 +526,10 @@ export class BotActions {
      * Eats food from inventory.
      * Waits for HP to increase or food to be consumed.
      */
-    async eatFood(itemPattern: string | RegExp): Promise<EatResult> {
-        const food = this.sdk.findInventoryItem(itemPattern);
+    async eatFood(target: InventoryItem | string | RegExp): Promise<EatResult> {
+        const food = this.resolveInventoryItem(target, /./);
         if (!food) {
-            return { success: false, hpGained: 0, message: `Food not found: ${itemPattern}` };
+            return { success: false, hpGained: 0, message: `Food not found: ${target}` };
         }
 
         // Find "Eat" option
@@ -570,10 +569,10 @@ export class BotActions {
      * Attacks an NPC.
      * Sends the attack command (doesn't wait for kill - that would take too long).
      */
-    async attackNpc(npcPattern: string | RegExp): Promise<AttackResult> {
-        const npc = this.sdk.findNearbyNpc(npcPattern);
+    async attackNpc(target: NearbyNpc | string | RegExp): Promise<AttackResult> {
+        const npc = this.resolveNpc(target);
         if (!npc) {
-            return { success: false, message: `NPC not found: ${npcPattern}` };
+            return { success: false, message: `NPC not found: ${target}` };
         }
 
         // Find "Attack" option
@@ -738,5 +737,18 @@ export class BotActions {
             return target;
         }
         return this.sdk.findNearbyNpc(target);
+    }
+
+    private resolveShopItem(
+        target: ShopItem | InventoryItem | string | RegExp,
+        items: ShopItem[]
+    ): ShopItem | null {
+        // If it's an object with id/name, find matching item in the shop's item list
+        if (typeof target === 'object' && 'id' in target && 'name' in target) {
+            return items.find(i => i.id === target.id) ?? null;
+        }
+        // Otherwise it's a pattern - search by name
+        const regex = typeof target === 'string' ? new RegExp(target, 'i') : target;
+        return items.find(i => regex.test(i.name)) ?? null;
     }
 }

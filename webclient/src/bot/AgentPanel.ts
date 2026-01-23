@@ -4,6 +4,7 @@
 
 import type { Client } from '#/client/Client.js';
 import { BotStateCollector, formatWorldStateForAgent, type BotWorldState } from '#/bot/BotSDK.js';
+import { canvas } from '#/graphics/Canvas.js';
 
 // Extract bot username from URL query params for multi-bot support
 function getBotUsername(): string {
@@ -79,7 +80,7 @@ interface SyncMessage {
 
 interface ActionLogEntry {
     timestamp: number;
-    type: 'thinking' | 'action' | 'result' | 'error' | 'system' | 'user_message';
+    type: 'thinking' | 'action' | 'result' | 'error' | 'system' | 'user_message' | 'code' | 'state';
     content: string;
 }
 
@@ -126,11 +127,18 @@ export class AgentPanel {
     // UI Elements
     private statusEl: HTMLDivElement | null = null;
     private syncStatusEl: HTMLDivElement | null = null;
-    private goalInput: HTMLInputElement | null = null;
     private messageInput: HTMLInputElement | null = null;
     private logContainer: HTMLDivElement | null = null;
-    private startBtn: HTMLButtonElement | null = null;
     private stopBtn: HTMLButtonElement | null = null;
+
+    // Deduplication for repeated entries
+    private lastEntryKey: string = '';
+    private lastEntryDiv: HTMLDivElement | null = null;
+    private lastEntryCount: number = 1;
+
+    // Todo list state
+    private todos: Array<{ content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }> = [];
+    private todoContainer: HTMLDivElement | null = null;
 
     constructor(client?: Client) {
         // Include bot username in clientId for easier identification
@@ -285,61 +293,82 @@ export class AgentPanel {
     }
 
     private handleSyncMessage(data: string): void {
-        let message: SyncMessage;
+        let message: SyncMessage & { type: string };
         try {
             message = JSON.parse(data);
         } catch {
             return;
         }
 
-        if (message.type === 'action' && message.action) {
-            this.pendingAction = message.action;
+        if (message.type === 'action' && (message as SyncMessage).action) {
+            this.pendingAction = (message as SyncMessage).action!;
             this.currentActionId = (message as any).actionId || null;  // Store for result correlation
             // Log the action
             this.state.actionLog.push({
                 timestamp: Date.now(),
                 type: 'action',
-                content: `${message.action.type}: ${message.action.reason || ''}`
+                content: `${(message as SyncMessage).action!.type}: ${(message as SyncMessage).action!.reason || ''}`
             });
             this.addLogEntry({
                 timestamp: Date.now(),
                 type: 'action',
-                content: `${message.action.type}: ${message.action.reason || ''}`
+                content: `${(message as SyncMessage).action!.type}: ${(message as SyncMessage).action!.reason || ''}`
             });
         }
 
-        if (message.type === 'thinking' && message.thinking) {
+        if (message.type === 'thinking' && (message as SyncMessage).thinking) {
             this.state.actionLog.push({
                 timestamp: Date.now(),
                 type: 'thinking',
-                content: message.thinking
+                content: (message as SyncMessage).thinking!
             });
             this.addLogEntry({
                 timestamp: Date.now(),
                 type: 'thinking',
-                content: message.thinking
+                content: (message as SyncMessage).thinking!
             });
         }
 
-        if (message.type === 'error' && message.error) {
+        if (message.type === 'error' && (message as SyncMessage).error) {
             this.state.actionLog.push({
                 timestamp: Date.now(),
                 type: 'error',
-                content: message.error
+                content: (message as SyncMessage).error!
             });
             this.addLogEntry({
                 timestamp: Date.now(),
                 type: 'error',
-                content: message.error
+                content: (message as SyncMessage).error!
             });
+        }
+
+        // Handle screenshot request from controller via sync service
+        if (message.type === 'screenshot_request') {
+            this.captureAndSendScreenshot();
+        }
+    }
+
+    private captureAndSendScreenshot(): void {
+        if (!canvas) return;
+
+        try {
+            // Capture canvas only (not full page) as PNG
+            const dataUrl = canvas.toDataURL('image/png');
+
+            // Send screenshot back via sync service
+            this.sendSync({
+                type: 'screenshot_response',
+                dataUrl
+            });
+        } catch (e) {
+            console.error('[AgentPanel] Failed to capture screenshot:', e);
         }
     }
 
     private updateSyncStatus(connected: boolean): void {
         if (this.syncStatusEl) {
-            this.syncStatusEl.innerHTML = connected
-                ? `<span style="color: #5f5;">Sync: ${BOT_USERNAME}</span>`
-                : '<span style="color: #f55;">Sync: Disconnected</span>';
+            this.syncStatusEl.textContent = connected ? BOT_USERNAME : '—';
+            this.syncStatusEl.style.color = connected ? '#555' : '#604040';
         }
     }
 
@@ -740,7 +769,34 @@ export class AgentPanel {
                 // Message was queued for the running agent - log entry already added
                 // Could add toast notification here if desired
                 break;
+
+            case 'todos':
+                // Update todo list from agent
+                if (Array.isArray(message.todos)) {
+                    this.todos = message.todos;
+                    this.renderTodos();
+                }
+                break;
         }
+    }
+
+    private renderTodos(): void {
+        if (!this.todoContainer) return;
+
+        // Hide if no active todos
+        const activeTodos = this.todos.filter(t => t.status !== 'completed');
+        if (activeTodos.length === 0) {
+            this.todoContainer.style.display = 'none';
+            return;
+        }
+
+        this.todoContainer.style.display = 'block';
+        let html = '';
+        for (const todo of activeTodos) {
+            const text = todo.status === 'in_progress' && todo.activeForm ? todo.activeForm : todo.content;
+            html += `<div class="todo-item todo-${todo.status}">${todo.status === 'in_progress' ? '→ ' : ''}${this.escapeHtml(text)}</div>`;
+        }
+        this.todoContainer.innerHTML = html;
     }
 
     private updateConnectionStatus(connected: boolean): void {
@@ -757,13 +813,19 @@ export class AgentPanel {
         if (!this.statusEl) return;
 
         if (this.state.running) {
-            this.statusEl.innerHTML = `<span style="color: #5f5;">Agent: Running</span>`;
-            if (this.startBtn) this.startBtn.disabled = true;
-            if (this.stopBtn) this.stopBtn.disabled = false;
+            this.statusEl.textContent = '● Running';
+            this.statusEl.style.color = '#70a070';
+            if (this.stopBtn) {
+                this.stopBtn.style.background = '#604040';
+                this.stopBtn.style.opacity = '1';
+            }
         } else {
-            this.statusEl.innerHTML = '<span style="color: #888;">Agent: Stopped</span>';
-            if (this.startBtn) this.startBtn.disabled = false;
-            if (this.stopBtn) this.stopBtn.disabled = true;
+            this.statusEl.textContent = '○ Idle';
+            this.statusEl.style.color = '#606060';
+            if (this.stopBtn) {
+                this.stopBtn.style.background = '#404040';
+                this.stopBtn.style.opacity = '0.5';
+            }
         }
     }
 
@@ -773,6 +835,10 @@ export class AgentPanel {
         // Render all log entries
         if (this.logContainer) {
             this.logContainer.innerHTML = '';
+            // Reset deduplication when rebuilding log
+            this.lastEntryKey = '';
+            this.lastEntryDiv = null;
+            this.lastEntryCount = 1;
             for (const entry of this.state.actionLog) {
                 this.addLogEntry(entry, false);
             }
@@ -783,57 +849,107 @@ export class AgentPanel {
     private addLogEntry(entry: ActionLogEntry, scroll: boolean = true): void {
         if (!this.logContainer) return;
 
+        // Filter out low-level SDK noise - only show high-level info
+        if (entry.type === 'action' && entry.content.endsWith(': SDK')) {
+            return; // Skip low-level SDK action spam
+        }
+        if (entry.type === 'result' && /^(Success|Failed): (Interacting|Walking|Talking|Picking|Dropping|Using|Clicking|Waiting|Set combat)/i.test(entry.content)) {
+            return; // Skip low-level result spam
+        }
+
+        // Create a key for deduplication (type + content for action/result pairs)
+        const entryKey = `${entry.type}:${entry.content}`;
+
+        // Check for repeated entries (only dedupe action and result types)
+        if ((entry.type === 'action' || entry.type === 'result') && entryKey === this.lastEntryKey && this.lastEntryDiv) {
+            this.lastEntryCount++;
+            // Update the existing entry with count
+            const countBadge = this.lastEntryDiv.querySelector('.repeat-count');
+            if (countBadge) {
+                countBadge.textContent = `×${this.lastEntryCount}`;
+                (countBadge as HTMLElement).style.display = 'inline';
+            }
+            if (scroll) {
+                this.logContainer.scrollTop = this.logContainer.scrollHeight;
+            }
+            return;
+        }
+
+        // Reset deduplication tracking for new entry
+        this.lastEntryKey = entryKey;
+        this.lastEntryCount = 1;
+
         const div = document.createElement('div');
         div.style.cssText = `
             padding: 4px 6px;
             margin: 2px 0;
-            border-radius: 3px;
             font-size: 11px;
             word-wrap: break-word;
         `;
 
-        const time = new Date(entry.timestamp).toLocaleTimeString('en-US', {
-            hour12: false,
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        });
+        // Count badge HTML (hidden by default)
+        const countBadgeHtml = `<span class="repeat-count" style="display:none; color:#505050; font-size:9px; margin-left:4px;"></span>`;
 
         switch (entry.type) {
             case 'thinking':
-                div.style.background = 'rgba(100, 100, 255, 0.15)';
-                div.style.borderLeft = '3px solid #66f';
-                div.innerHTML = `<span style="color:#888">${time}</span> <span style="color:#aaf;">Claude:</span> ${this.escapeHtml(entry.content)}`;
+                div.style.color = '#b0b0b0';
+                div.innerHTML = this.escapeHtml(entry.content);
+                this.lastEntryDiv = null;
+                this.lastEntryKey = '';
                 break;
 
             case 'action':
-                div.style.background = 'rgba(255, 200, 100, 0.15)';
-                div.style.borderLeft = '3px solid #fa0';
-                div.innerHTML = `<span style="color:#888">${time}</span> <span style="color:#fa0;">Action:</span> ${this.escapeHtml(entry.content)}`;
+                div.style.color = '#707070';
+                div.innerHTML = `${this.escapeHtml(entry.content)}${countBadgeHtml}`;
+                this.lastEntryDiv = div;
+                break;
+
+            case 'code':
+                div.style.padding = '0';
+                div.innerHTML = this.formatCodeEntry('', entry.content);
+                this.lastEntryDiv = null;
+                this.lastEntryKey = '';
                 break;
 
             case 'result':
-                div.style.background = 'rgba(100, 255, 100, 0.15)';
-                div.style.borderLeft = '3px solid #5f5';
-                div.innerHTML = `<span style="color:#888">${time}</span> <span style="color:#5f5;">Result:</span> ${this.escapeHtml(entry.content)}`;
+                div.innerHTML = this.formatResultEntry('', entry.content) + countBadgeHtml;
+                this.lastEntryDiv = div;
                 break;
 
             case 'error':
-                div.style.background = 'rgba(255, 100, 100, 0.15)';
-                div.style.borderLeft = '3px solid #f55';
-                div.innerHTML = `<span style="color:#888">${time}</span> <span style="color:#f55;">Error:</span> ${this.escapeHtml(entry.content)}`;
+                div.style.color = '#a06060';
+                div.innerHTML = `${this.escapeHtml(entry.content)}${countBadgeHtml}`;
+                this.lastEntryDiv = div;
                 break;
 
             case 'system':
-                div.style.background = 'rgba(150, 150, 150, 0.15)';
-                div.style.borderLeft = '3px solid #888';
-                div.innerHTML = `<span style="color:#888">${time}</span> <span style="color:#aaa;">System:</span> ${this.escapeHtml(entry.content)}`;
+                div.style.color = '#585858';
+                div.style.fontSize = '10px';
+                div.innerHTML = this.escapeHtml(entry.content);
+                this.lastEntryDiv = null;
+                this.lastEntryKey = '';
+                break;
+
+            case 'state':
+                div.style.color = '#606060';
+                div.style.fontSize = '10px';
+                div.style.fontFamily = 'monospace';
+                div.style.whiteSpace = 'pre-wrap';
+                div.style.background = '#151515';
+                div.style.borderRadius = '3px';
+                div.style.padding = '6px 8px';
+                div.innerHTML = this.escapeHtml(entry.content);
+                this.lastEntryDiv = null;
+                this.lastEntryKey = '';
                 break;
 
             case 'user_message':
-                div.style.background = 'rgba(100, 200, 255, 0.15)';
-                div.style.borderLeft = '3px solid #5bf';
-                div.innerHTML = `<span style="color:#888">${time}</span> <span style="color:#5bf;">You:</span> ${this.escapeHtml(entry.content)}`;
+                div.style.color = '#90b0c0';
+                div.style.borderLeft = '2px solid #506070';
+                div.style.paddingLeft = '8px';
+                div.innerHTML = this.escapeHtml(entry.content);
+                this.lastEntryDiv = null;
+                this.lastEntryKey = '';
                 break;
         }
 
@@ -842,6 +958,84 @@ export class AgentPanel {
         if (scroll) {
             this.logContainer.scrollTop = this.logContainer.scrollHeight;
         }
+    }
+
+    private formatCodeEntry(time: string, code: string): string {
+        const lines = code.split('\n');
+        const id = `code-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+        const isLong = lines.length > 10;
+
+        // Try to highlight with hljs if available
+        let highlighted = this.escapeHtml(code);
+        const hljs = (window as any).hljs;
+        if (hljs) {
+            try {
+                highlighted = hljs.highlight(code, { language: 'typescript' }).value;
+            } catch {
+                // Fall back to escaped
+            }
+        }
+
+        let html = `<div style="background: #1e1e1e; border-radius: 3px; overflow: hidden;">`;
+
+        if (isLong) {
+            html += `<div style="padding: 4px 8px; display: flex; align-items: center; border-bottom: 1px solid #2d2d2d;">
+                <span style="color:#505050; font-size:10px;">${lines.length} lines</span>
+                <button onclick="this.parentElement.nextElementSibling.classList.toggle('collapsed'); this.textContent = this.textContent === '▼' ? '▶' : '▼';"
+                       style="background: none; border: none; color: #505050; cursor: pointer; font-size: 10px; margin-left: auto;">▼</button>
+            </div>`;
+        }
+
+        html += `<div id="${id}" style="padding: 8px 10px; max-height: 200px; overflow-y: auto; overflow-x: hidden;">
+            <pre style="margin: 0; white-space: pre-wrap; word-break: break-word; font-family: 'Consolas', 'Monaco', monospace; font-size: 11px; line-height: 1.5; color: #707070;"><code>${highlighted}</code></pre>
+        </div></div>`;
+
+        return html;
+    }
+
+    private formatResultEntry(time: string, content: string): string {
+        const isError = content.toLowerCase().startsWith('error');
+        const color = isError ? '#a06060' : '#608060';
+
+        // Try to parse as JSON
+        try {
+            const parsed = JSON.parse(content);
+            const formatted = JSON.stringify(parsed, null, 2);
+            const lines = formatted.split('\n');
+
+            // Compact for small results
+            if (lines.length <= 2) {
+                return `<span style="color:${color}; font-family: monospace; font-size: 10px;">${this.syntaxHighlightJson(JSON.stringify(parsed))}</span>`;
+            }
+
+            // Expandable for larger results
+            const id = `r-${Date.now()}`;
+            return `<div style="background: #1a1a1a; border-radius: 3px; overflow: hidden;">
+                <div style="padding: 4px 8px; display: flex; align-items: center;">
+                    <span style="color:#484848; font-size:10px;">${lines.length} lines</span>
+                    <button onclick="document.getElementById('${id}').classList.toggle('collapsed'); this.textContent = this.textContent === '▼' ? '▶' : '▼';"
+                           style="background: none; border: none; color: #484848; cursor: pointer; font-size: 10px; margin-left: auto;">▼</button>
+                </div>
+                <div id="${id}" style="padding: 6px 8px; max-height: 120px; overflow-y: auto; overflow-x: hidden; border-top: 1px solid #252525;">
+                    <pre style="margin: 0; font-size: 10px; line-height: 1.3; font-family: monospace; white-space: pre-wrap; word-break: break-all; color: #707070;">${this.syntaxHighlightJson(formatted)}</pre>
+                </div>
+            </div>`;
+        } catch {
+            // Plain text
+            return `<span style="color:${color}; font-size: 11px;">${this.escapeHtml(content)}</span>`;
+        }
+    }
+
+    private syntaxHighlightJson(json: string): string {
+        const hljs = (window as any).hljs;
+        if (hljs) {
+            try {
+                return hljs.highlight(json, { language: 'json' }).value;
+            } catch {
+                // Fall back
+            }
+        }
+        return this.escapeHtml(json);
     }
 
     private escapeHtml(text: string): string {
@@ -854,43 +1048,110 @@ export class AgentPanel {
     }
 
     private createUI(): void {
+        // Add highlight.js and styles
+        if (!document.getElementById('agent-panel-styles')) {
+            // Load highlight.js with typescript and json
+            const hljsScript = document.createElement('script');
+            hljsScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js';
+            hljsScript.onload = () => {
+                const tsScript = document.createElement('script');
+                tsScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/typescript.min.js';
+                document.head.appendChild(tsScript);
+                const jsonScript = document.createElement('script');
+                jsonScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/json.min.js';
+                document.head.appendChild(jsonScript);
+            };
+            document.head.appendChild(hljsScript);
+
+            const style = document.createElement('style');
+            style.id = 'agent-panel-styles';
+            style.textContent = `
+                .collapsed { display: none !important; }
+                #agent-panel ::-webkit-scrollbar { width: 6px; height: 6px; }
+                #agent-panel ::-webkit-scrollbar-track { background: transparent; }
+                #agent-panel ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+                #agent-panel .todo-item { padding: 2px 0; font-size: 10px; color: #505050; }
+                #agent-panel .todo-in_progress { color: #808080; }
+                #agent-panel .todo-completed { color: #383838; }
+                #agent-panel pre code.hljs { background: transparent; padding: 0; }
+                #agent-panel .hljs { background: transparent; color: #808080; }
+                #agent-panel .hljs-keyword { color: #907090; }
+                #agent-panel .hljs-built_in { color: #709080; }
+                #agent-panel .hljs-string { color: #908070; }
+                #agent-panel .hljs-number { color: #809070; }
+                #agent-panel .hljs-literal { color: #708090; }
+                #agent-panel .hljs-comment { color: #505050; }
+                #agent-panel .hljs-function { color: #909070; }
+                #agent-panel .hljs-title.function_ { color: #909070; }
+                #agent-panel .hljs-params { color: #707080; }
+                #agent-panel .hljs-property { color: #707080; }
+                #agent-panel .hljs-attr { color: #807070; }
+                #agent-panel .hljs-variable { color: #707080; }
+                #agent-panel .hljs-punctuation { color: #606060; }
+            `;
+            document.head.appendChild(style);
+        }
+
         this.container = document.createElement('div');
         this.container.id = 'agent-panel';
         this.container.style.cssText = `
             position: fixed;
             bottom: 10px;
             left: 10px;
-            width: 400px;
-            max-height: 500px;
-            background: rgba(0, 0, 0, 0.95);
-            border: 2px solid #5bf;
-            border-radius: 8px;
+            width: 500px;
+            height: 600px;
+            min-width: 350px;
+            min-height: 300px;
+            max-width: 90vw;
+            max-height: 90vh;
+            background: #0a0a0a;
+            border: 1px solid #333;
+            border-radius: 4px;
             font-family: 'Consolas', 'Monaco', monospace;
             font-size: 12px;
-            color: #fff;
+            color: #888;
             z-index: 10003;
             display: none;
             flex-direction: column;
+            resize: both;
+            overflow: hidden;
         `;
 
-        // Header
+        // Header with status
         const header = document.createElement('div');
         header.style.cssText = `
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 8px 12px;
-            background: rgba(85, 187, 255, 0.2);
-            border-bottom: 1px solid #5bf;
+            padding: 6px 10px;
+            background: rgba(40, 40, 40, 0.95);
+            border-bottom: 1px solid #333;
             cursor: move;
+            font-size: 11px;
         `;
-        header.innerHTML = `
-            <span style="font-weight: bold; color: #5bf;">AGENT SDK</span>
-            <div>
-                <button id="agent-minimize" style="background: none; border: 1px solid #5bf; color: #5bf; cursor: pointer; padding: 2px 8px; margin-right: 4px;">_</button>
-                <button id="agent-close" style="background: none; border: 1px solid #5bf; color: #5bf; cursor: pointer; padding: 2px 8px;">X</button>
-            </div>
+
+        const headerLeft = document.createElement('div');
+        headerLeft.style.cssText = 'display: flex; align-items: center; gap: 10px;';
+
+        this.statusEl = document.createElement('span');
+        this.statusEl.style.color = '#888';
+        this.statusEl.textContent = '○ Idle';
+
+        this.syncStatusEl = document.createElement('span');
+        this.syncStatusEl.style.color = '#555';
+        this.syncStatusEl.textContent = '';
+
+        headerLeft.appendChild(this.statusEl);
+        headerLeft.appendChild(this.syncStatusEl);
+
+        const headerRight = document.createElement('div');
+        headerRight.innerHTML = `
+            <button id="agent-minimize" style="background: none; border: none; color: #555; cursor: pointer; padding: 2px 6px; font-size: 12px;">_</button>
+            <button id="agent-close" style="background: none; border: none; color: #555; cursor: pointer; padding: 2px 6px; font-size: 12px;">×</button>
         `;
+
+        header.appendChild(headerLeft);
+        header.appendChild(headerRight);
 
         // Content container
         const content = document.createElement('div');
@@ -901,168 +1162,92 @@ export class AgentPanel {
             flex-direction: column;
             gap: 8px;
             overflow: hidden;
-        `;
-
-        // Status row
-        const statusRow = document.createElement('div');
-        statusRow.style.cssText = `
-            display: flex;
-            gap: 10px;
-            padding: 6px 8px;
-            background: rgba(0, 0, 0, 0.5);
-            border-radius: 4px;
-            font-size: 11px;
-        `;
-
-        this.statusEl = document.createElement('div');
-        this.statusEl.textContent = 'Controller: Connecting...';
-
-        this.syncStatusEl = document.createElement('div');
-        this.syncStatusEl.innerHTML = '<span style="color: #888;">Sync: Waiting...</span>';
-
-        statusRow.appendChild(this.statusEl);
-        statusRow.appendChild(this.syncStatusEl);
-
-        // Goal input row
-        const goalRow = document.createElement('div');
-        goalRow.style.cssText = `display: flex; gap: 6px;`;
-
-        this.goalInput = document.createElement('input');
-        this.goalInput.type = 'text';
-        this.goalInput.placeholder = 'Enter goal for agent...';
-        this.goalInput.value = this.currentGoal;
-        this.goalInput.style.cssText = `
             flex: 1;
-            background: #111;
-            border: 1px solid #5bf;
-            color: #fff;
-            padding: 6px 8px;
-            font-family: inherit;
-            font-size: 11px;
-            border-radius: 3px;
+            min-height: 0;
         `;
-        // Sync goal changes to URL as user types
-        this.goalInput.oninput = () => {
-            const goal = this.goalInput?.value.trim();
-            if (goal) {
-                this.currentGoal = goal;
-                updateUrlWithGoal(goal);
-            }
-        };
 
-        this.startBtn = document.createElement('button');
-        this.startBtn.textContent = 'Start';
-        this.startBtn.style.cssText = `
-            background: #5bf;
-            border: none;
-            color: #000;
-            padding: 6px 12px;
-            cursor: pointer;
-            font-weight: bold;
-            border-radius: 3px;
-        `;
-        this.startBtn.onclick = () => this.startAgent();
-
-        this.stopBtn = document.createElement('button');
-        this.stopBtn.textContent = 'Stop';
-        this.stopBtn.disabled = true;
-        this.stopBtn.style.cssText = `
-            background: #f55;
-            border: none;
-            color: #fff;
-            padding: 6px 12px;
-            cursor: pointer;
-            font-weight: bold;
-            border-radius: 3px;
-        `;
-        this.stopBtn.onclick = () => this.stopAgent();
-
-        goalRow.appendChild(this.goalInput);
-        goalRow.appendChild(this.startBtn);
-        goalRow.appendChild(this.stopBtn);
-
-        // Message input row
-        const messageRow = document.createElement('div');
-        messageRow.style.cssText = `display: flex; gap: 6px;`;
+        // Chat input row (simplified - single input for both starting and messaging)
+        const chatRow = document.createElement('div');
+        chatRow.style.cssText = `display: flex; gap: 6px;`;
 
         this.messageInput = document.createElement('input');
         this.messageInput.type = 'text';
-        this.messageInput.placeholder = 'Send message to agent...';
+        this.messageInput.placeholder = 'Chat with agent... (Enter to send)';
+        this.messageInput.value = this.currentGoal || '';
         this.messageInput.style.cssText = `
             flex: 1;
             background: #111;
             border: 1px solid #5bf;
             color: #fff;
-            padding: 6px 8px;
+            padding: 8px 10px;
             font-family: inherit;
-            font-size: 11px;
+            font-size: 12px;
             border-radius: 3px;
         `;
         this.messageInput.onkeydown = (e) => {
-            if (e.key === 'Enter') this.sendMessage();
+            if (e.key === 'Enter') this.sendChatMessage();
         };
 
-        const sendBtn = document.createElement('button');
-        sendBtn.textContent = 'Send';
-        sendBtn.style.cssText = `
-            background: #5bf;
+        this.stopBtn = document.createElement('button');
+        this.stopBtn.textContent = '⏹';
+        this.stopBtn.title = 'Stop agent';
+        this.stopBtn.style.cssText = `
+            background: #f55;
             border: none;
-            color: #000;
-            padding: 6px 12px;
+            color: #fff;
+            padding: 8px 12px;
             cursor: pointer;
             font-weight: bold;
             border-radius: 3px;
+            font-size: 14px;
         `;
-        sendBtn.onclick = () => this.sendMessage();
+        this.stopBtn.onclick = () => this.stopAgent();
 
-        messageRow.appendChild(this.messageInput);
-        messageRow.appendChild(sendBtn);
-
-        // Log header
-        const logHeader = document.createElement('div');
-        logHeader.style.cssText = `
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-top: 4px;
-        `;
-        logHeader.innerHTML = `
-            <span style="color: #888; font-size: 10px;">ACTION LOG</span>
-        `;
-
-        const clearBtn = document.createElement('button');
-        clearBtn.textContent = 'Clear';
-        clearBtn.style.cssText = `
-            background: none;
-            border: 1px solid #666;
-            color: #888;
-            padding: 2px 8px;
+        const resetBtn = document.createElement('button');
+        resetBtn.textContent = '↺';
+        resetBtn.title = 'Reset conversation';
+        resetBtn.style.cssText = `
+            background: #666;
+            border: none;
+            color: #fff;
+            padding: 8px 12px;
             cursor: pointer;
-            font-size: 10px;
+            font-weight: bold;
             border-radius: 3px;
+            font-size: 14px;
         `;
-        clearBtn.onclick = () => this.clearLog();
-        logHeader.appendChild(clearBtn);
+        resetBtn.onclick = () => this.resetConversation();
+
+        chatRow.appendChild(this.messageInput);
+        chatRow.appendChild(this.stopBtn);
+        chatRow.appendChild(resetBtn);
+
+
+        // Todo list container
+        this.todoContainer = document.createElement('div');
+        this.todoContainer.style.cssText = `
+            padding: 6px 8px;
+            border-bottom: 1px solid #252525;
+            display: none;
+        `;
 
         // Log container
         this.logContainer = document.createElement('div');
         this.logContainer.style.cssText = `
             flex: 1;
-            min-height: 200px;
-            max-height: 300px;
+            min-height: 100px;
             background: rgba(0, 0, 0, 0.5);
             border: 1px solid #333;
             border-radius: 4px;
             overflow-y: auto;
+            overflow-x: hidden;
             padding: 4px;
         `;
         this.logContainer.innerHTML = '<div style="color: #666; font-style: italic; padding: 10px;">No activity yet</div>';
 
         // Assemble content
-        content.appendChild(statusRow);
-        content.appendChild(goalRow);
-        content.appendChild(messageRow);
-        content.appendChild(logHeader);
+        content.appendChild(chatRow);
+        content.appendChild(this.todoContainer);
         content.appendChild(this.logContainer);
 
         this.container.appendChild(header);
@@ -1108,28 +1293,38 @@ export class AgentPanel {
         });
     }
 
-    private startAgent(): void {
-        const goal = this.goalInput?.value.trim();
-        if (!goal) {
-            alert('Please enter a goal for the agent');
-            return;
+    private sendChatMessage(): void {
+        const message = this.messageInput?.value.trim();
+        if (!message) return;
+
+        // Clear input immediately
+        if (this.messageInput) {
+            this.messageInput.value = '';
         }
-        // Update currentGoal so sendState() uses the correct goal in world.md
-        this.setGoal(goal);
-        this.send({ type: 'start', goal });
+
+        // Update URL with the message as goal context
+        this.setGoal(message);
+
+        // Send as message - controller will start agent if not running
+        this.send({ type: 'send', message });
     }
 
     private stopAgent(): void {
         this.send({ type: 'stop' });
     }
 
-    private sendMessage(): void {
-        const message = this.messageInput?.value.trim();
-        if (!message) return;
-
-        this.send({ type: 'send', message });
-        if (this.messageInput) {
-            this.messageInput.value = '';
+    private resetConversation(): void {
+        // Stop if running, clear log, and reset state
+        this.send({ type: 'stop' });
+        this.send({ type: 'clearLog' });
+        this.state.actionLog = [];
+        this.state.goal = null;
+        // Reset deduplication
+        this.lastEntryKey = '';
+        this.lastEntryDiv = null;
+        this.lastEntryCount = 1;
+        if (this.logContainer) {
+            this.logContainer.innerHTML = '<div style="color: #666; font-style: italic; padding: 10px;">Conversation reset. Type a message to start.</div>';
         }
     }
 

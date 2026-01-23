@@ -185,29 +185,29 @@ await this.sdk.waitForCondition(state => {
 ### Skills & Resources
 | Method | Description | Success Signal |
 |--------|-------------|----------------|
-| `chopTree(target?)` | Chops a tree | Logs in inventory OR tree disappears |
-| `burnLogs(logs?)` | Burns logs with tinderbox | Firemaking XP gain |
-| `pickupItem(target)` | Picks up ground item | Item in inventory |
+| `chopTree(target?)` | Chops a tree. Target: `NearbyLoc \| string \| RegExp` | Logs in inventory OR tree disappears |
+| `burnLogs(target?)` | Burns logs with tinderbox. Target: `InventoryItem \| string \| RegExp` | Firemaking XP gain |
+| `pickupItem(target)` | Picks up ground item. Target: `GroundItem \| string \| RegExp` | Item in inventory |
 
 ### Movement & Interaction
 | Method | Description | Success Signal |
 |--------|-------------|----------------|
 | `walkTo(x, z, tolerance?)` | Walks to location | Player position within tolerance |
-| `talkTo(npc)` | Talks to NPC | Dialog opens |
-| `openShop(npcPattern?)` | Opens shop via NPC | Shop interface opens |
+| `talkTo(target)` | Talks to NPC. Target: `NearbyNpc \| string \| RegExp` | Dialog opens |
+| `openShop(target?)` | Opens shop via NPC. Target: `NearbyNpc \| string \| RegExp` | Shop interface opens |
 
 ### Shop Actions
 | Method | Description | Success Signal |
 |--------|-------------|----------------|
-| `buyFromShop(item, amount?)` | Buys from open shop | Item appears in inventory |
-| `sellToShop(item, amount?)` | Sells to open shop | Item leaves shop inventory |
+| `buyFromShop(target, amount?)` | Buys from open shop. Target: `ShopItem \| string \| RegExp` | Item appears in inventory |
+| `sellToShop(target, amount?)` | Sells to open shop. Target: `InventoryItem \| ShopItem \| string \| RegExp` | Item leaves shop inventory |
 
 ### Equipment & Combat
 | Method | Description | Success Signal |
 |--------|-------------|----------------|
-| `equipItem(item)` | Equips item from inventory | Item leaves inventory |
-| `eatFood(item)` | Eats food | HP increases OR food consumed |
-| `attackNpc(npc)` | Attacks NPC | Attack command sent (no wait) |
+| `equipItem(target)` | Equips item from inventory. Target: `InventoryItem \| string \| RegExp` | Item leaves inventory |
+| `eatFood(target)` | Eats food. Target: `InventoryItem \| string \| RegExp` | HP increases OR food consumed |
+| `attackNpc(target)` | Attacks NPC. Target: `NearbyNpc \| string \| RegExp` | Attack command sent (no wait) |
 
 ### Helpers
 | Method | Description |

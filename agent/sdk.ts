@@ -240,7 +240,7 @@ export class BotSDK {
         });
     }
 
-    async sendWalk(x: number, z: number, running: boolean = false): Promise<ActionResult> {
+    async sendWalk(x: number, z: number, running: boolean = true): Promise<ActionResult> {
         return this.sendAction({
             type: 'walkTo',
             x,

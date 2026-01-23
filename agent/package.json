@@ -6,8 +6,8 @@
     "rsbot": "./cli.ts"
   },
   "scripts": {
-    "start": "bun run rsbot-agent.ts",
-    "dev": "bun run --watch rsbot-agent.ts",
+    "agent": "bun run rsbot-agent-sdk.ts",
+    "agent:dev": "bun run --watch rsbot-agent-sdk.ts",
     "sync": "bun run sync.ts",
     "sync:dev": "bun run --watch sync.ts",
     "cli": "bun run cli.ts",
