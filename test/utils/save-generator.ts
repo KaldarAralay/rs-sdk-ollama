@@ -576,6 +576,31 @@ export const TestPresets = {
             { id: Items.BODY_RUNE, count: 2 },
         ],
     } as SaveConfig,
+
+    // Alias for TUTORIAL_COMPLETE - standard post-tutorial Lumbridge spawn
+    LUMBRIDGE_SPAWN: {
+        position: Locations.LUMBRIDGE_CASTLE,
+        inventory: [
+            { id: Items.BRONZE_AXE, count: 1 },
+            { id: Items.TINDERBOX, count: 1 },
+            { id: Items.SMALL_FISHING_NET, count: 1 },
+            { id: Items.SHRIMPS, count: 1 },
+            { id: Items.BUCKET, count: 1 },
+            { id: Items.POT, count: 1 },
+            { id: Items.BREAD, count: 1 },
+            { id: Items.BRONZE_PICKAXE, count: 1 },
+            { id: Items.BRONZE_DAGGER, count: 1 },
+            { id: Items.BRONZE_SWORD, count: 1 },
+            { id: Items.WOODEN_SHIELD, count: 1 },
+            { id: Items.SHORTBOW, count: 1 },
+            { id: Items.BRONZE_ARROW, count: 25 },
+            { id: Items.AIR_RUNE, count: 25 },
+            { id: Items.MIND_RUNE, count: 15 },
+            { id: Items.WATER_RUNE, count: 6 },
+            { id: Items.EARTH_RUNE, count: 4 },
+            { id: Items.BODY_RUNE, count: 2 },
+        ],
+    } as SaveConfig,
 };
 
 /** Type for a single test preset (value from TestPresets) */

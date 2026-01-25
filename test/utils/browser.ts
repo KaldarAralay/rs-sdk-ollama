@@ -14,6 +14,9 @@ const BOT_URL = process.env.BOT_URL || 'http://localhost:8888/bot';
 // Default: false (show browser) for easier debugging
 const DEFAULT_HEADLESS = process.env.HEADLESS === 'true' || process.env.HEADLESS === '1';
 
+// BACKGROUND env var: 'true' or '1' to spawn windows off-screen (won't steal focus)
+const DEFAULT_BACKGROUND = process.env.BACKGROUND === 'true' || process.env.BACKGROUND === '1';
+
 // Hold browser open for inspection when not headless
 const CLEANUP_DELAY_MS = 2000;
 
@@ -31,15 +34,11 @@ const LIGHTWEIGHT_CHROME_ARGS = [
     '--disable-gpu',
     '--disable-dev-shm-usage',
     '--disable-accelerated-2d-canvas',
-    '--no-first-run',
-    '--no-zygote',
     '--disable-backgrounding-occluded-windows',
     '--disable-renderer-backgrounding',
     '--disable-background-timer-throttling',
     '--disable-ipc-flooding-protection',
-    '--js-flags=--max-old-space-size=128',  // Limit JS heap per page
     // Additional performance flags
-    '--disable-software-rasterizer',
     '--disable-extensions',
     '--disable-component-extensions-with-background-pages',
     '--disable-default-apps',
@@ -52,18 +51,20 @@ const LIGHTWEIGHT_CHROME_ARGS = [
     '--safebrowsing-disable-auto-update',
     '--disable-infobars',
     '--disable-features=TranslateUI',
-    '--disable-features=VizDisplayCompositor',
 ];
 
 /**
  * Get or create a shared browser instance.
  * Use this for load tests to avoid spawning many browser processes.
  */
-export async function getSharedBrowser(headless: boolean = true): Promise<Browser> {
+export async function getSharedBrowser(headless: boolean = true, background: boolean = false): Promise<Browser> {
     if (!sharedBrowser || !sharedBrowser.connected) {
+        const chromeArgs = background && !headless
+            ? [...LIGHTWEIGHT_CHROME_ARGS, '--window-position=3000,3000']
+            : LIGHTWEIGHT_CHROME_ARGS;
         sharedBrowser = await puppeteer.launch({
             headless,
-            args: LIGHTWEIGHT_CHROME_ARGS,
+            args: chromeArgs,
             protocolTimeout: 120000,  // 2 minutes for heavy load scenarios
         });
     }
@@ -104,19 +105,25 @@ export interface SDKSession extends BrowserSession {
  */
 export async function launchBotBrowser(
     botName?: string,
-    options: { headless?: boolean; useSharedBrowser?: boolean } = {}
+    options: { headless?: boolean; useSharedBrowser?: boolean; background?: boolean } = {}
 ): Promise<BrowserSession> {
     const name = botName || 'bot' + Math.random().toString(36).substring(2, 5);
     const headless = options.headless ?? DEFAULT_HEADLESS;
     const useShared = options.useSharedBrowser ?? false;
+    const background = options.background ?? DEFAULT_BACKGROUND;
+
+    // Add off-screen position if running in background mode (prevents focus stealing)
+    const chromeArgs = background && !headless
+        ? [...LIGHTWEIGHT_CHROME_ARGS, '--window-position=3000,3000']
+        : LIGHTWEIGHT_CHROME_ARGS;
 
     let browser: Browser;
     if (useShared) {
-        browser = await getSharedBrowser(headless);
+        browser = await getSharedBrowser(headless, background);
     } else {
         browser = await puppeteer.launch({
             headless,
-            args: LIGHTWEIGHT_CHROME_ARGS
+            args: chromeArgs
         });
     }
 
@@ -213,17 +220,19 @@ export async function skipTutorial(sdk: BotSDK, maxAttempts: number = 30): Promi
  * This is the main entry point for most tests.
  *
  * @param useSharedBrowser - If true, uses a shared browser instance (for load tests)
+ * @param background - If true, spawns window off-screen (won't steal focus)
  */
 export async function launchBotWithSDK(
     botName?: string,
-    options: { headless?: boolean; skipTutorial?: boolean; useSharedBrowser?: boolean } = {}
+    options: { headless?: boolean; skipTutorial?: boolean; useSharedBrowser?: boolean; background?: boolean } = {}
 ): Promise<SDKSession> {
     const shouldSkipTutorial = options.skipTutorial ?? true;
 
     // Launch browser
     const browser = await launchBotBrowser(botName, {
         headless: options.headless,
-        useSharedBrowser: options.useSharedBrowser
+        useSharedBrowser: options.useSharedBrowser,
+        background: options.background
     });
 
     // Connect SDK

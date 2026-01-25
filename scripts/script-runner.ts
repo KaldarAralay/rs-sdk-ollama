@@ -47,6 +47,10 @@ export interface ScriptConfig {
     launchOptions?: {
         skipTutorial?: boolean;
         headless?: boolean;
+        /** Spawn window off-screen to avoid stealing focus (env: BACKGROUND=true) */
+        background?: boolean;
+        /** Use shared browser - all scripts open as tabs in one window (default: true) */
+        useSharedBrowser?: boolean;
     };
 }
 
@@ -325,7 +329,11 @@ export function runScript(config: ScriptConfig, scriptFn: ScriptFn): void {
                 screenshotIntervalMs: screenshotInterval
             });
 
-            session = await launchBotWithSDK(botName, config.launchOptions);
+            session = await launchBotWithSDK(botName, {
+                ...config.launchOptions,
+                // Default to shared browser (all scripts as tabs in one window)
+                useSharedBrowser: config.launchOptions?.useSharedBrowser ?? true
+            });
             const { sdk, bot, page } = session;
             console.log(`Bot '${session.botName}' ready at (${sdk.getState()?.player?.worldX}, ${sdk.getState()?.player?.worldZ})`);
 

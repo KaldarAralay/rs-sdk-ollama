@@ -1221,6 +1221,7 @@ export interface BotWorldState extends BotState {
         isOpen: boolean;
         options: Array<{ index: number; text: string }>;
         isWaiting: boolean;
+        allComponents?: Array<{ id: number; type: number; buttonType: number; option: string; text: string }>;
     };
     interface: {
         isOpen: boolean;
