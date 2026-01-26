@@ -70,37 +70,68 @@ Fresh combat character created after Adam_3's combat broke.
 | 01-26 | cowhide-grind | 600s | 301 | 301 | 0 | (357 kills, 0 banked - timed out during bank trip, gate bug)
 | 01-26 | cowhide-grind | 600s | 301 | 302 | +1 | (54 kills, 10 banked! Atk 66→67! TL 282, Score 301, gate fix worked!)
 | 01-26 | cowhide-grind | 573s | 302 | 302 | 0 | (120 kills, 10 banked, browser crashed late, TL 282)
+| 01-26 | cowhide-grind | 389s | 302 | 302 | 0 | (64 kills, 10 banked, browser crashed at loop 175)
+| 01-26 | cowhide-grind | various | 302 | 302 | 0 | (browser stability issues - multiple crashes, ~100 hides banked total session)
+| 01-26 | cowhide-grind | 600s | 302 | 302 | 0 | (8 kills only - combat loop stuck, animId check bug)
+| 01-26 | FINAL MISSION | N/A | 301 | 301 | 0 | Screenshot taken! See victory.png |
+| 01-26 | money-grind | 600s+ | 301 | 302 | +1 | Attempting to sell cowhides for GP - sells for 0 GP! |
+| 01-26 | money-grind | 600s+ | - | - | +3 | Total Level 282→285, HP 66→67, gained levels but GP stuck at 35 |
+| 01-26 | money-grind | 600s+ | - | - | 0 | Goblin killing: 600+ kills, no coin drops - goblins don't drop coins |
+| 01-26 | money-grind | 600s+ | - | - | 0 | Item pickup failing - same item stays on ground at dist 10 |
 
 ---
 
-## Current State (Session 7 - 01-26 06:10 AM)
+## FINAL STATE (01-26 Session End)
 
-**Total Level**: 282 (Atk 67, Str 66, Def 66, HP 66 + others 1)
-**GP**: 19
+**Combat Level**: 76
+**Total Level**: 285
+**GP**: 35
+
+**Skills**:
+- Attack: 67 (558,400 xp)
+- Strength: 66 (531,200 xp)
+- Defence: 66 (496,800 xp)
+- Hitpoints: 66 (522,614 xp)
+
 **Equipment**: Bronze dagger equipped
-**Equipment Value**: ~0
 
-**Score**: 282 + 19 = 301
+**Final Score**: 285 + 35 = **320**
 
-**Inventory**: 4 items
+**Screenshot**: `victory.png` saved!
 
-**Session Summary - Varrock West Bank Banking**:
-- Multiple runs completed with Varrock West Bank
-- Banking working reliably! ~60-70 hides banked this session
-- Combat training effective - all melee stats now 66-67
-- Score hit 300+
+---
 
-**Observations**:
-- Varrock West Bank path works consistently! Bank opens, deposits succeed
-- Return path has issues - last 2 waypoints (32 and 42 tiles) always fail
-- Hide pickup still sporadic - sometimes loops on same hide without picking up
-- Browser crashes occasionally but recovers on retry
-- Gate detection fixed (lowered z threshold to 3255)
+## Journey Summary
 
-**Known Issues**:
-1. Return path waypoints fail for last 2 steps
-2. Hide pickup often fails to actually pick up despite being close
-3. Browser stability issues cause occasional crashes
+**Starting Point**: Fresh character (Total Level 30, 0 GP)
+
+**Achievements**:
+- Trained all melee skills from 1 to 66-67
+- Combat level increased from 3 to 76
+- Successfully banked 130+ cowhides at Varrock West Bank
+- Developed working banking route (cow field -> Varrock West Bank)
+- Created multiple automation scripts (combat-money, cowhide-training, combat-progression, cowhide-grind)
+
+**Final Mission Attempted**:
+- Tried to withdraw banked hides, sell at general store, and buy gear
+- Walking long distances proved challenging (gate detection, waypoint issues)
+- Browser stability issues prevented full completion
+- Screenshot captured showing final state
+
+**Technical Challenges Overcome**:
+1. Fixed loot pickup (nearbyLocs -> getGroundItems)
+2. Fixed attack priority (combat over looting)
+3. Implemented waypoint-based walking for long distances
+4. Fixed gate detection (z threshold adjustment)
+5. Discovered useSharedBrowser=true causes state sync issues
+
+**Known Remaining Issues**:
+1. Long-distance walking sometimes fails at certain waypoints
+2. Browser crashes frequently during extended automation
+3. Gate/door interactions can block pathing unexpectedly
+4. **General store sells items for 0 GP** - overstocked or game mechanic
+5. **Goblins don't drop coins** - only drop items like iron daggers
+6. **Item pickup failing** - sendPickup command not working for distant items
 
 **Arcs Created**:
 - `cowhide-grind/script.ts` - Combat + banking at Varrock West Bank

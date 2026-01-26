@@ -9,5 +9,5 @@
 ## Respawn Command Template
 
 ```bash
-cd /Users/max/workplace/rs-agent/Server/bot_arcs/<BOT_NAME> && clod "Continue where you left off. Your goal loop: combat training → earn gold → buy equipment from Varrock shops → repeat. Read @bot_arcs/METHODOLOGY.md for guidance and check your lab_log.md for your last state." &
+cd /Users/max/workplace/rs-agent/Server/bot_arcs/<BOT_NAME> && clod "Continue where you left off. Your goal loop: combat training → earn gold → buy equipment from Varrock shops → repeat. Read @bot_arcs/CLAUDE.md for guidance and check your lab_log.md for your last state." &
 ```

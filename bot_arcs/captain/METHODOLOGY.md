@@ -9,7 +9,7 @@ I am an overseer agent that monitors and respawns bot instances.
 3. **Check if clod processes are running** (`ps aux | grep clod`)
 4. **Respawn any stopped bots** with:
    ```bash
-   cd /path/to/bot && clod "Continue where you left off. Your goal loop: [goals]. Read @bot_arcs/METHODOLOGY.md for guidance and check your lab_log.md for your last state." &
+   cd /path/to/bot && clod "Continue where you left off. Your goal loop: [goals]. Read @bot_arcs/CLAUDE.md for guidance and check your lab_log.md for your last state." &
    ```
 5. **Repeat**
 

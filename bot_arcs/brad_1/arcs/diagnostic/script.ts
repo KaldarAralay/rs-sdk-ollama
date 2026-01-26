@@ -23,7 +23,7 @@ runArc({
     ctx.log('Waiting for state to populate...');
     try {
         await ctx.sdk.waitForCondition(s => {
-            return s.player && s.player.worldX > 0 && s.skills.some(sk => sk.baseLevel > 0);
+            return !!(s.player && s.player.worldX > 0 && s.skills.some(sk => sk.baseLevel > 0));
         }, 45000);
     } catch (e) {
         ctx.error('State did not populate');
@@ -41,10 +41,18 @@ runArc({
     const str = state?.skills.find(s => s.name === 'Strength');
     const def = state?.skills.find(s => s.name === 'Defence');
     const hp = state?.skills.find(s => s.name === 'Hitpoints');
+    const wc = state?.skills.find(s => s.name === 'Woodcutting');
+    const mining = state?.skills.find(s => s.name === 'Mining');
+    const fishing = state?.skills.find(s => s.name === 'Fishing');
+    const thieving = state?.skills.find(s => s.name === 'Thieving');
     ctx.log(`Attack: ${atk?.baseLevel}`);
     ctx.log(`Strength: ${str?.baseLevel}`);
     ctx.log(`Defence: ${def?.baseLevel}`);
     ctx.log(`Hitpoints: ${hp?.level} / ${hp?.baseLevel}`);
+    ctx.log(`Woodcutting: ${wc?.baseLevel}`);
+    ctx.log(`Mining: ${mining?.baseLevel}`);
+    ctx.log(`Fishing: ${fishing?.baseLevel}`);
+    ctx.log(`Thieving: ${thieving?.baseLevel}`);
 
     const totalLevel = state?.skills.reduce((sum, s) => sum + s.baseLevel, 0) ?? 0;
     ctx.log(`Total Level: ${totalLevel}`);

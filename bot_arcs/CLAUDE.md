@@ -44,7 +44,7 @@ Confidence + track record = higher run length. Robust, long running tasks are th
 
 ```
 bot_arcs/
-├── METHODOLOGY.md              # This file
+├── CLAUDE.md                   # This file (auto-loaded by Claude Code)
 ├── learnings/                  # Shared patterns and working code snippets
 │   ├── mining.md
 │   ├── combat.md

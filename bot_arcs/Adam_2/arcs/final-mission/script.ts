@@ -25,9 +25,11 @@ import { writeFileSync } from 'fs';
 
 // Locations
 const LOCATIONS = {
+    DRAYNOR_BANK: { x: 3092, z: 3243 },        // Where character is, where hides are banked
     VARROCK_WEST_BANK: { x: 3185, z: 3436 },
     LUMBRIDGE_GEN_STORE: { x: 3212, z: 3246 },
-    VARROCK_SWORD_SHOP: { x: 3204, z: 3497 },  // Actually at 3204, 3399 (sword shop is south of bank)
+    DRAYNOR_GEN_STORE: { x: 3082, z: 3249 },   // Closer! Diango's toy stall area
+    VARROCK_SWORD_SHOP: { x: 3204, z: 3399 },  // Zaff's Superior Staffs area
     VARROCK_ARMOR_SHOP: { x: 3209, z: 3420 },  // Horvik's Armour Shop
 };
 
@@ -90,58 +92,93 @@ async function waitForGameState(ctx: ScriptContext): Promise<boolean> {
 async function openBankAndWithdraw(ctx: ScriptContext): Promise<boolean> {
     ctx.log('=== Opening bank to withdraw hides ===');
 
-    // Find bank booth or banker
+    // Walk closer to bank if needed
     const bankBooth = ctx.sdk.findNearbyLoc(/bank booth/i);
-    const banker = ctx.sdk.findNearbyNpc(/banker/i);
+    if (bankBooth && bankBooth.distance > 2) {
+        ctx.log(`Walking closer to bank booth (distance: ${bankBooth.distance})`);
+        await ctx.bot.walkTo(bankBooth.x, bankBooth.z);
+        await new Promise(r => setTimeout(r, 1000));
+        ctx.progress();
+    }
 
-    if (bankBooth) {
-        ctx.log(`Found bank booth at distance ${bankBooth.distance}`);
-        const useOpt = bankBooth.optionsWithIndex.find(o => /use|bank/i.test(o.text));
-        if (useOpt) {
-            await ctx.sdk.sendInteractLoc(bankBooth.x, bankBooth.z, bankBooth.id, useOpt.opIndex);
-        } else {
-            await ctx.sdk.sendInteractLoc(bankBooth.x, bankBooth.z, bankBooth.id, 1);
-        }
-    } else if (banker) {
+    // Try to open bank with banker NPC (more reliable)
+    const banker = ctx.sdk.findNearbyNpc(/banker/i);
+    const bankBoothNow = ctx.sdk.findNearbyLoc(/bank booth/i);
+
+    if (banker) {
         ctx.log(`Found banker at distance ${banker.distance}`);
         const bankOpt = banker.optionsWithIndex.find(o => /bank/i.test(o.text));
         if (bankOpt) {
+            ctx.log(`Using banker 'Bank' option (opIndex: ${bankOpt.opIndex})`);
             await ctx.sdk.sendInteractNpc(banker.index, bankOpt.opIndex);
         } else {
-            await ctx.sdk.sendTalkToNpc(banker.index);
+            ctx.log(`Banker options: ${banker.options.join(', ')}`);
+            // Try option 2 which is often "Bank" in OSRS
+            await ctx.sdk.sendInteractNpc(banker.index, 2);
+        }
+    } else if (bankBoothNow) {
+        ctx.log(`Found bank booth at distance ${bankBoothNow.distance}`);
+        ctx.log(`Booth options: ${bankBoothNow.options.join(', ')}`);
+        const useOpt = bankBoothNow.optionsWithIndex.find(o => /use|bank/i.test(o.text));
+        if (useOpt) {
+            await ctx.sdk.sendInteractLoc(bankBoothNow.x, bankBoothNow.z, bankBoothNow.id, useOpt.opIndex);
+        } else {
+            // Try option 2 which is often "Bank" for booths
+            await ctx.sdk.sendInteractLoc(bankBoothNow.x, bankBoothNow.z, bankBoothNow.id, 2);
         }
     } else {
         ctx.error('No bank booth or banker found!');
         return false;
     }
 
-    // Wait for bank interface
-    await new Promise(r => setTimeout(r, 2000));
-    ctx.progress();
-
-    // Check if interface opened
-    const state = ctx.state();
-    ctx.log(`Interface state: ${JSON.stringify(state?.interface)}`);
-    ctx.log(`Modal open: ${state?.modalOpen}, modalInterface: ${state?.modalInterface}`);
-
-    // Try to set note mode and withdraw all
-    // Bank interface component IDs for note mode toggle
-    // Note: This is game-specific - may need adjustment
-
-    // Try withdrawing from slot 0 with large amount (should be hides)
-    ctx.log('Attempting to withdraw all items from bank slot 0...');
-    for (let slot = 0; slot < 5; slot++) {
-        ctx.log(`Trying bank slot ${slot}...`);
-        const result = await ctx.sdk.sendBankWithdraw(slot, 9999);
-        ctx.log(`Withdraw slot ${slot} result: ${result.message}`);
-        await new Promise(r => setTimeout(r, 300));
+    // Wait for bank interface to open
+    ctx.log('Waiting for bank interface to open...');
+    let bankOpened = false;
+    for (let i = 0; i < 20; i++) {  // 10 seconds max
+        await new Promise(r => setTimeout(r, 500));
         ctx.progress();
+
+        const state = ctx.state();
+        // Check various ways bank might be detected
+        if (state?.modalOpen || state?.interface?.isOpen || (state?.modalInterface && state.modalInterface > 0)) {
+            ctx.log(`Bank opened! modalOpen=${state.modalOpen}, interface.isOpen=${state.interface?.isOpen}, modalInterface=${state.modalInterface}`);
+            bankOpened = true;
+            break;
+        }
+
+        if (i % 4 === 0) {
+            ctx.log(`Waiting for bank... (${i * 500}ms)`);
+        }
     }
 
-    // Close bank by pressing escape or clicking close
+    if (!bankOpened) {
+        ctx.warn('Bank interface did not open, trying anyway...');
+    }
+
+    // Wait a bit more for interface to fully load
+    await new Promise(r => setTimeout(r, 1000));
+
+    // Try withdrawing from ALL slots (hides might be in different slots)
+    ctx.log('Attempting to withdraw all items from bank...');
+    for (let slot = 0; slot < 20; slot++) {  // Check 20 slots
+        const result = await ctx.sdk.sendBankWithdraw(slot, 9999);
+        const inv = ctx.state()?.inventory ?? [];
+        if (slot < 5 || inv.length > 0) {
+            ctx.log(`Slot ${slot}: ${result.message} - Inventory: ${inv.length} items`);
+        }
+        await new Promise(r => setTimeout(r, 150));
+        ctx.progress();
+
+        // If inventory is getting full, stop
+        if (inv.length >= 26) {
+            ctx.log('Inventory nearly full, stopping withdrawal');
+            break;
+        }
+    }
+
+    // Wait and check what we got
     await new Promise(r => setTimeout(r, 500));
 
-    // Check what we got
     const inv = ctx.state()?.inventory ?? [];
     ctx.log(`Inventory after bank: ${inv.length} items`);
     for (const item of inv) {
@@ -154,7 +191,13 @@ async function openBankAndWithdraw(ctx: ScriptContext): Promise<boolean> {
         return true;
     }
 
-    ctx.warn('No cowhides withdrawn');
+    // Even if no hides, continue with whatever we have
+    if (inv.length > 0) {
+        ctx.log('Got some items, continuing...');
+        return true;
+    }
+
+    ctx.warn('No items withdrawn from bank');
     return false;
 }
 
@@ -373,11 +416,53 @@ runArc({
     await ctx.bot.dismissBlockingUI();
     ctx.progress();
 
-    // Step 1: Walk to Varrock West Bank
+    // Step 1: Walk to Draynor Bank (where hides are stored)
     ctx.log('');
-    ctx.log('=== STEP 1: Walk to Varrock West Bank ===');
-    const walkResult1 = await ctx.bot.walkTo(LOCATIONS.VARROCK_WEST_BANK.x, LOCATIONS.VARROCK_WEST_BANK.z);
-    ctx.log(`Walk to bank: ${walkResult1.message}`);
+    ctx.log('=== STEP 1: Walk to Draynor Bank ===');
+    const playerStart = ctx.state()?.player;
+    const distToDraynor = Math.sqrt(
+        Math.pow((playerStart?.worldX ?? 0) - LOCATIONS.DRAYNOR_BANK.x, 2) +
+        Math.pow((playerStart?.worldZ ?? 0) - LOCATIONS.DRAYNOR_BANK.z, 2)
+    );
+    ctx.log(`Current position: (${playerStart?.worldX}, ${playerStart?.worldZ})`);
+    ctx.log(`Distance to Draynor Bank: ${distToDraynor.toFixed(0)}`);
+
+    if (distToDraynor > 10) {
+        // Use waypoints to avoid Dark Wizards
+        const waypoints = [
+            { x: 3230, z: 3270 },  // West from chicken farm
+            { x: 3200, z: 3260 },  // Continue west
+            { x: 3170, z: 3250 },  // Southwest
+            { x: 3140, z: 3245 },  // Approaching Draynor
+            { x: 3110, z: 3243 },  // Almost there
+            { x: 3092, z: 3243 },  // Draynor Bank
+        ];
+
+        for (const wp of waypoints) {
+            ctx.log(`Walking to waypoint (${wp.x}, ${wp.z})...`);
+            try {
+                const result = await ctx.bot.walkTo(wp.x, wp.z, 5);
+                ctx.log(`Walk result: ${result.message}`);
+
+                // Check if close enough
+                const pos = ctx.state()?.player;
+                const dist = Math.sqrt(
+                    Math.pow((pos?.worldX ?? 0) - LOCATIONS.DRAYNOR_BANK.x, 2) +
+                    Math.pow((pos?.worldZ ?? 0) - LOCATIONS.DRAYNOR_BANK.z, 2)
+                );
+                if (dist < 15) {
+                    ctx.log('Close enough to bank, stopping waypoint walk');
+                    break;
+                }
+            } catch (e) {
+                ctx.warn(`Waypoint walk error: ${e}`);
+            }
+            ctx.progress();
+            await new Promise(r => setTimeout(r, 500));
+        }
+    } else {
+        ctx.log(`Already near Draynor Bank`);
+    }
 
     // Step 2: Withdraw all cowhides as notes
     ctx.log('');
@@ -402,6 +487,48 @@ runArc({
     const armorBudget = totalGold - swordBudget;       // 40% for armor
 
     ctx.log(`Budget split: ${swordBudget} GP for sword, ${armorBudget} GP for armor`);
+
+    // If no gold, skip shopping and go straight to screenshot
+    if (totalGold < 50) {
+        ctx.log('');
+        ctx.log('=== NOT ENOUGH GOLD - SKIPPING SHOPPING ===');
+        ctx.log('Taking victory screenshot with current equipment...');
+
+        // Walk to a nice location for the screenshot (Lumbridge castle courtyard)
+        await ctx.bot.walkTo(3222, 3218, 10);
+        await takeVictoryScreenshot(ctx);
+
+        // Final summary
+        ctx.log('');
+        ctx.log('==========================================');
+        ctx.log('     MISSION COMPLETE (No Gold Version)   ');
+        ctx.log('==========================================');
+
+        const finalState = ctx.state()!;
+        ctx.log(`Position: (${finalState.player?.worldX}, ${finalState.player?.worldZ})`);
+        ctx.log(`Total Level: ${getTotalLevel(ctx)}`);
+        ctx.log(`GP: ${getCoins(ctx)}`);
+        ctx.log('');
+        ctx.log('=== COMBAT STATS ===');
+        const atk = ctx.sdk.getSkill('Attack');
+        const str = ctx.sdk.getSkill('Strength');
+        const def = ctx.sdk.getSkill('Defence');
+        const hp = ctx.sdk.getSkill('Hitpoints');
+        ctx.log(`Attack: ${atk?.baseLevel}`);
+        ctx.log(`Strength: ${str?.baseLevel}`);
+        ctx.log(`Defence: ${def?.baseLevel}`);
+        ctx.log(`Hitpoints: ${hp?.baseLevel}`);
+        ctx.log('');
+        ctx.log('=== EQUIPMENT ===');
+        const equipment = finalState.equipment ?? [];
+        for (const e of equipment) {
+            ctx.log(`  - ${e.name}`);
+        }
+        ctx.log('');
+        ctx.log('Note: Could not afford gear upgrades. Still rocking bronze!');
+        ctx.log('Victory screenshot saved to: /Users/max/workplace/rs-agent/Server/bot_arcs/Adam_2/victory.png');
+        return;
+    }
 
     // Step 5: Walk to Varrock Sword Shop
     ctx.log('');

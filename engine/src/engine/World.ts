@@ -867,6 +867,14 @@ class World {
                         continue;
                     }
 
+                    // Save current state on reconnect to prevent progress loss from browser crashes
+                    // Without this, fast reconnects prevent timeout-triggered saves from ever firing
+                    this.loginThread.postMessage({
+                        type: 'player_autosave',
+                        username: other.username,
+                        save: other.save()
+                    });
+
                     if (isClientConnected(other)) {
                         player.addSessionLog(LoggerEventType.MODERATOR, 'Logged to world ' + Environment.NODE_ID + ' replacing session', other.client.uuid);
                         other.client.close();

@@ -74,3 +74,44 @@ Monitored 3 bots for 4 hours with 30-minute check intervals. Respawned all bots 
 - Gate fix confirmed working: `ctx.bot.openDoor(/gate/i)` before walking
 - Attack 72→73, Total Level 311→312
 - Respawned to continue loop
+
+### 06:00 - Final Gear-Up Mission (END OF SESSION)
+
+Attempted to sell hides and buy gear for all 3 bots. Results:
+
+| Bot | Screenshot | Combat Lvl | Total Lvl | Gear Upgraded? |
+|-----|------------|------------|-----------|----------------|
+| Adam_2 | ✅ | ~74 | 348 | ❌ Bank empty |
+| Adam_4 | ✅ | 76 | 282 | ❌ Pathfinding stuck |
+| brad_1 | ✅ | ~79 | 312 | ❌ GS paid 0gp |
+
+**Victory screenshots saved** to each bot's folder.
+
+### Session Conclusion
+
+**What Works:**
+- Combat training at cow field (excellent)
+- Gate opening with `ctx.bot.openDoor(/gate/i)`
+- Banking at Varrock West Bank (when pathfinding cooperates)
+- State persistence between runs
+
+**Main Blocker: PATHFINDING**
+- Bots get stuck at waypoints
+- Can't reliably walk long distances (cow field → bank → shops)
+- See `captain/PATHFINDING_ISSUES.md` for detailed problem spec
+
+**Tomorrow's Priority:**
+Build robust pathfinding solution - this unlocks the full goal loop:
+`Combat → Bank hides → Sell → Buy gear → Repeat`
+
+---
+
+## Final Bot States (2026-01-26 ~06:00)
+
+| Bot | Score | Combat Stats | Equipment |
+|-----|-------|--------------|-----------|
+| Adam_2 | 348 | Atk 68, Str 67, Def 68, HP 67 | Bronze |
+| Adam_4 | 301 | Atk 67, Str 66, Def 66, HP 66 | Bronze |
+| brad_1 | 312 | Atk 73, Str 77, Def 71, HP 74 | Bronze |
+
+All bots stopped. Good night! 🌙

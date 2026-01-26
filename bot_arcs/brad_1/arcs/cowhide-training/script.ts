@@ -171,14 +171,64 @@ async function walkWaypoints(ctx: ScriptContext, waypoints: {x: number, z: numbe
     return true;
 }
 
-// Helper to check if inside cow pen
+// Helper to check if inside or near enough to cow pen (can attack cows)
 function isInsideCowPen(ctx: ScriptContext): boolean {
     const player = ctx.state()?.player;
     if (!player) return false;
-    // Cow pen is roughly: x between 3242-3265, z between 3267-3295
-    // Gate is on south side around z=3267
-    return player.worldX >= 3242 && player.worldX <= 3265 &&
-           player.worldZ >= 3267 && player.worldZ <= 3295;
+    // Expanded cow pen area - includes some buffer around the actual pen
+    // The key is: can we attack cows without "I can't reach that!" messages
+    // Pen is roughly: x between 3240-3270, z between 3255-3295
+    return player.worldX >= 3235 && player.worldX <= 3270 &&
+           player.worldZ >= 3255 && player.worldZ <= 3295;
+}
+
+// Check if stuck outside cow pen on north side (can't walk through fence)
+function isOutsideOnNorth(ctx: ScriptContext): boolean {
+    const player = ctx.state()?.player;
+    if (!player) return false;
+    // North of fence: z > 3295 (roughly) and within x range of pen
+    return player.worldZ > 3295 && player.worldX >= 3235 && player.worldX <= 3270;
+}
+
+// Walk around fence from north side to south gate and enter pen
+async function enterCowPenFromNorth(ctx: ScriptContext): Promise<boolean> {
+    ctx.log('Entering cow pen from north - walking around fence to south gate...');
+
+    // Walk east around the fence
+    ctx.log('Step 1: Walking east to avoid fence...');
+    await ctx.sdk.sendWalk(3270, 3295, true);
+    await new Promise(r => setTimeout(r, 3000));
+    markProgress(ctx);
+
+    // Walk south along east side
+    ctx.log('Step 2: Walking south along east side...');
+    await ctx.sdk.sendWalk(3270, 3265, true);
+    await new Promise(r => setTimeout(r, 3000));
+    markProgress(ctx);
+
+    // Walk west to south gate area
+    ctx.log('Step 3: Walking west to south gate...');
+    await ctx.sdk.sendWalk(3253, 3263, true);
+    await new Promise(r => setTimeout(r, 3000));
+    markProgress(ctx);
+
+    // Open gate
+    ctx.log('Step 4: Opening gate...');
+    await ctx.bot.openDoor(/gate/i);
+    await new Promise(r => setTimeout(r, 1500));
+    markProgress(ctx);
+
+    // Walk through gate into pen
+    ctx.log('Step 5: Walking through gate...');
+    await ctx.sdk.sendWalk(3253, 3275, true);
+    await new Promise(r => setTimeout(r, 3000));
+    markProgress(ctx);
+
+    const finalPos = ctx.state()?.player;
+    const inside = isInsideCowPen(ctx);
+    ctx.log(`After entry: position (${finalPos?.worldX}, ${finalPos?.worldZ}), inside=${inside}`);
+
+    return inside;
 }
 
 // === BANKING ===
@@ -210,34 +260,54 @@ async function bankHides(ctx: ScriptContext, stats: Stats): Promise<boolean> {
     }
 
     // Now we should be in or near the cow pen - exit via SOUTH gate
+    // Gate is at approximately (3253, 3267) - need to approach from inside (z > 3267)
     ctx.log('Walking to south gate area inside pen...');
-    const arrivedGate = await walkToPoint(ctx, 3253, 3270);
-    ctx.log(`Arrived at south gate area: ${arrivedGate}`);
+
+    // First walk closer to gate (still inside pen)
+    await ctx.sdk.sendWalk(3253, 3270, true);
+    await new Promise(r => setTimeout(r, 2000));
+    markProgress(ctx);
+
+    const preGatePos = ctx.state()?.player;
+    ctx.log(`Pre-gate position: (${preGatePos?.worldX}, ${preGatePos?.worldZ})`);
 
     // CRITICAL: Open the gate BEFORE trying to walk through
     ctx.log('Opening gate to exit cow pen...');
     await ctx.bot.openDoor(/gate/i);
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 1500));
     markProgress(ctx);
 
-    // Now walk THROUGH the open gate to the south side
-    ctx.log('Walking through gate to exit pen...');
-    const exitedPen = await walkToPoint(ctx, 3250, 3260);
-    ctx.log(`Exited pen: ${exitedPen}`);
+    // Walk THROUGH the open gate step by step (use direct sendWalk, not pathfinder)
+    ctx.log('Walking through gate (step 1: to gate)...');
+    await ctx.sdk.sendWalk(3253, 3267, true);
+    await new Promise(r => setTimeout(r, 1500));
+    markProgress(ctx);
+
+    ctx.log('Walking through gate (step 2: through gate)...');
+    await ctx.sdk.sendWalk(3253, 3263, true);
+    await new Promise(r => setTimeout(r, 2000));
+    markProgress(ctx);
+
+    ctx.log('Walking through gate (step 3: away from gate)...');
+    await ctx.sdk.sendWalk(3250, 3258, true);
+    await new Promise(r => setTimeout(r, 2000));
+    markProgress(ctx);
 
     const afterGatePos = ctx.state()?.player;
     const afterX = afterGatePos?.worldX ?? 0;
     const afterZ = afterGatePos?.worldZ ?? 0;
     ctx.log(`Position after exit: (${afterX}, ${afterZ})`);
 
-    // Verify we actually exited - if still near cow field but not exited, abort
-    if (afterZ > 3265) {
-        ctx.warn('Failed to exit cow pen (still at z > 3265), aborting bank trip');
+    // Verify we actually exited - outside pen should have z < 3268 (gate is around 3267)
+    // Being at z=3266 or lower is fine for exiting
+    if (afterZ > 3268) {
+        ctx.warn(`Failed to exit cow pen (at z=${afterZ}, expected z < 3268), aborting bank trip`);
         return false;
     }
+    ctx.log('Successfully exited cow pen!');
 
-    // Walk to Draynor Bank (via south/west route)
-    await walkWaypoints(ctx, WAYPOINTS_TO_BANK, 'to Draynor Bank');
+    // Walk to Varrock West Bank (going north)
+    await walkWaypoints(ctx, WAYPOINTS_TO_BANK, 'to Varrock West Bank');
 
     // Open bank
     ctx.log('Opening bank...');
@@ -425,6 +495,16 @@ async function trainingLoop(ctx: ScriptContext, stats: Stats): Promise<void> {
             await ctx.sdk.sendClickDialog(0);
             markProgress(ctx);
             await new Promise(r => setTimeout(r, 300));
+            continue;
+        }
+
+        // Check if stuck outside cow pen on north side (can't attack cows through fence)
+        if (isOutsideOnNorth(ctx)) {
+            ctx.log('Detected: stuck outside cow pen on north side!');
+            const entered = await enterCowPenFromNorth(ctx);
+            if (!entered) {
+                ctx.warn('Failed to enter cow pen from north');
+            }
             continue;
         }
 

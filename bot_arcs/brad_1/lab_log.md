@@ -1,16 +1,39 @@
 # Brad_1 Lab Log
 
-## Character Stats (Updated 2026-01-25 21:46)
-- **Attack**: 63
-- **Strength**: 68
-- **Defence**: 62
-- **Hitpoints**: 64
-- **Total Level**: 274
-- **Combat Level**: 74
-- **Equipment**: Bronze sword + Wooden shield (SEVERELY UNDER-GEARED for Attack 63!)
-- **Inventory**: 19 cowhides, 4 raw beef, tools (FULL - 28/28)
-- **GP**: 0
-- **Position**: (3240, 3301) - near cow field gate
+## Character Stats (Updated 2026-01-26 15:37)
+- **Attack**: 76
+- **Strength**: 79
+- **Defence**: 73
+- **Hitpoints**: 76
+- **Thieving**: 43 (NEW!)
+- **Total Level**: 363
+- **Combat Level**: ~87
+- **Equipment**: Bronze pickaxe (wielded) + Wooden shield (SEVERELY UNDER-GEARED!)
+- **Inventory**: Bronze sword (unequipped!), 203 GP, 7 cowhides, food, tools
+- **Position**: (3200, 3230) - near Lumbridge
+
+## 2026-01-26 Session: Thieving for Gear Money
+
+### Run 1: Thieving Training
+**Duration**: 10 minutes
+**Goal**: Pickpocket men for GP → bank → buy Varrock gear
+
+**Results**:
+- ✅ **Thieving: 1 → 43** (+42 levels!)
+- ✅ **GP: 1 → 203** (+202 GP earned)
+- ✅ **52+ successful pickpockets**
+- ⚠️ Banking verification timed out (coins still in inventory)
+
+**Technical Learnings**:
+- Walking: `sendWalk` more reliable than `walkTo` pathfinder
+- Cow field gate: Use `openDoor(/gate/i)` before walking through
+- Men location: Lumbridge castle (3222, 3218) has men with "Pickpocket" option
+- Thieving gives 3 GP per successful pickpocket (sometimes 6 GP!)
+- Stun recovery: ~5 seconds wait when caught
+
+**Next**: Continue to 2000+ GP, then buy gear in Varrock
+
+---
 
 ## 2026-01-25 Session
 
@@ -921,15 +944,349 @@ Ending state: Attack 65, Strength 70, Defence 63, HP 66, Total 281
 
 ---
 
-## Character Stats (Updated 2026-01-26 05:55)
-- **Attack**: 73
-- **Strength**: 77
-- **Defence**: 71
-- **Hitpoints**: 74
-- **Total Level**: 312
-- **Combat Level**: ~78
-- **Equipment**: Bronze sword + Wooden shield (SEVERELY UNDER-GEARED for Attack 73!)
-- **Inventory**: Empty
-- **Bank**: 18+ cowhides
+## Character Stats (Updated 2026-01-26 07:15)
+- **Attack**: 74
+- **Strength**: 78
+- **Defence**: 72
+- **Hitpoints**: 75
+- **Total Level**: 316
+- **Combat Level**: ~79
+- **Equipment**: Bronze sword + Wooden shield (SEVERELY UNDER-GEARED for Attack 74!)
+- **Inventory**: 6 items (tools, food)
+- **Bank**: 41 cowhides ← NEW!
 - **GP**: 1
-- **Position**: Cow field
+- **Position**: Near Varrock West Bank (3185, 3438)
+
+---
+
+## 2026-01-26 Session: Cowhide-Banking Loop (06:38-06:53)
+
+### Run 1: Combat + Entry Fix Testing
+**Duration**: ~5 minutes (browser crash)
+**Goal**: Test north-side entry fix, combat training
+
+**Script Improvements Made**:
+1. Added `isOutsideOnNorth()` detection for when stuck outside cow pen on north side
+2. Added `enterCowPenFromNorth()` function to walk around fence to south gate
+3. Updated gate exit check from z < 3265 to z < 3268 (less strict)
+4. Expanded `isInsideCowPen()` boundaries to include more of combat area
+
+**Results**:
+- Entry from north worked on 3rd attempt
+- Collected 13 hides before browser crash
+- Combat training working when inside pen
+
+### Run 2: Full 10-minute Run
+**Duration**: Full 10 minutes (timeout)
+**Goal**: Combat training + hide collection + banking attempt
+
+**Results**:
+- Attack: 73 → 74 (+1 level!)
+- Defence: 71 → 72 (+1 level!)
+- Strength: 78 (XP gained)
+- Kills: 46 cows
+- Hides collected: 19 (in inventory at end)
+
+**Banking Attempts**: 3 attempts, all failed
+- Exit position consistently at z=3266 (just above threshold of 3265)
+- Script correctly dropped hides and continued training
+- Fixed threshold from z < 3265 to z < 3268 for next run
+
+**Issues**:
+1. Gate exit not walking far enough south
+2. "I can't reach that!" messages when cows inside pen, player at edge
+
+**Current Character State**:
+- Attack: 74, Strength: 78, Defence: 72
+- Total Level: ~316
+- Position: Cow field (3248, 3286)
+- Inventory: 19 cowhides
+- Equipment: Bronze sword + Wooden shield (STILL under-geared!)
+
+**Next Steps**:
+1. Run another iteration with fixed exit threshold
+2. If banking works, deposit hides and continue training
+3. Target: Reach Varrock West Bank successfully and deposit hides
+
+### Run 3: BANKING SUCCESS! (06:54-07:04)
+**Duration**: Full 10 minutes (timeout)
+**Goal**: Bank hides at Varrock West Bank
+
+**BANKING SUCCESSFUL!**
+- ✅ Exited cow pen at z=3266 (passed z < 3268 threshold)
+- ✅ Walked to Varrock West Bank (3189, 3428)
+- ✅ **Bank opened!**
+- ✅ **Deposited 21 cowhides!**
+- ✅ Returned to cow field (3248, 3275)
+
+**Combat Progress**:
+- Kills: 15 (during run, after banking)
+- Hides collected before banking: 22
+- Hides deposited: 21
+
+**Current State**:
+- Position: (3248, 3275) - inside cow field
+- Attack: 74, Strength: 78, Defence: 72, HP: 75
+- Total Level: 316
+- **Bank: 21 cowhides** (newly deposited!)
+- Inventory: ~0-1 hides (near empty after banking)
+
+**What Worked**:
+1. Gate exit threshold fix (z < 3268 instead of z < 3265)
+2. Step-by-step walking through gate (sendWalk instead of pathfinder)
+3. Waypoint-based walking to bank (some failed but eventually arrived)
+4. Bank interaction with banker NPC
+
+**Issues**:
+- Waypoint walking still unreliable (several "Failed to reach waypoint" messages)
+- Some banking attempts still fail when exit z > 3268
+- Walking back from bank had issues too
+
+**The cowhide-banking loop is now working!**
+
+### Run 4: Second Banking Success (07:04-07:14)
+**Duration**: ~9 minutes (browser crashed on return walk)
+**Goal**: Continue cowhide-banking loop
+
+**BANKING SUCCESSFUL (2nd time)!**
+- Kills: 48 cows
+- Hides collected: 22
+- ✅ **Deposited 20 cowhides at Varrock West Bank!**
+- Browser crashed on return walk to cow field
+
+**Bank Total**:
+- Previous: 21 cowhides
+- This run: +20 cowhides
+- **TOTAL IN BANK: 41 cowhides!**
+
+**Current State**:
+- Position: Near Varrock West Bank (3185, 3438) - crashed during return
+- Attack: 74, Strength: 78, Defence: 72, HP: 75
+- Total Level: 316
+- Inventory: 6 items (tools/food, no hides)
+- **Bank: 41 cowhides**
+
+**Loop Status**: WORKING!
+- Gate exit: ✅
+- Walk to bank: ✅
+- Deposit hides: ✅
+- Walk back: Partial (browser crashes)
+
+### Run 5-7: Browser Stability Issues (07:13-07:21)
+Multiple runs attempted but browser kept crashing shortly after start.
+- State population timing issues
+- "Page crashed!" errors
+- Connection closed errors
+
+Character last seen at (3249, 3369) - between bank and cow field.
+
+---
+
+## SESSION SUMMARY: Cowhide-Banking Loop (2026-01-26)
+
+### Achievements
+1. **Banking Loop Working!** Successfully deposited 41 cowhides total at Varrock West Bank
+2. **Gate navigation fixed** - step-by-step sendWalk commands work better than pathfinder
+3. **North-side entry** - can now detect and walk around fence when stuck outside
+4. **Combat training** - gained Attack 73→74, Strength 77→78, Defence 71→72, HP 74→75
+
+### Key Technical Learnings
+1. Gate threshold z < 3268 works better than z < 3265
+2. Direct `ctx.sdk.sendWalk()` is more reliable than pathfinder for short distances
+3. `isOutsideOnNorth()` detection helps recover from stuck positions
+4. Waypoint walking still somewhat unreliable but eventually works
+
+### Issues Remaining
+1. Browser crashes frequently (puppeteer stability)
+2. State population timing issues (sometimes position shows 0,0)
+3. Return walk from bank often fails or crashes
+
+### Final Character State
+- **Attack**: 74
+- **Strength**: 78
+- **Defence**: 72
+- **Hitpoints**: 75
+- **Total Level**: 316
+- **Bank**: 41 cowhides
+- **GP**: 1
+
+---
+
+## 2026-01-26 FINAL MISSION: Gear Up and Screenshot
+
+### Mission Objective
+Cash out 18 cowhides from bank, sell at Lumbridge General Store, buy gear upgrades, take victory screenshot.
+
+### Mission Results
+
+**Steps Completed:**
+1. Withdrew 18 cowhides from Varrock West Bank (as notes)
+2. Walked to Lumbridge General Store
+3. **Sold 18 cowhides** - but only earned ~0 GP (general stores pay very little!)
+4. Could not afford any gear upgrades with only 1 GP
+5. Re-equipped Bronze sword (had swapped to Bronze dagger)
+6. **Victory screenshot saved to: victory.png**
+
+**Issue Encountered:**
+General stores pay extremely low prices for items. 18 cowhides at ~10gp each should have been ~180gp, but the overstocked general store paid almost nothing. Need to use a specialized leather shop or tanner for better prices.
+
+### Final Character Stats (2026-01-26 06:28)
+| Stat | Value | Notes |
+|------|-------|-------|
+| Attack | 73 | Can use Rune (40+) |
+| Strength | 77 | Well above 70 target |
+| Defence | 71 | Above 70 target |
+| Hitpoints | 74 | |
+| Total Level | 312 | |
+| Combat Level | ~79 | |
+| GP | 1 | General store gave poor prices |
+
+### Equipment
+- **Weapon**: Bronze sword (unchanged - couldn't afford upgrade)
+- **Shield**: Wooden shield
+
+### Inventory
+- Bronze axe
+- Bronze dagger
+- Coins (1)
+- Shrimps
+- Bread
+- Bronze pickaxe
+
+### Session Summary
+Despite having 18 cowhides in the bank, the general store paid almost nothing for them. The character remains severely under-geared (Bronze sword at Attack 73, can use Rune!) but has excellent combat stats.
+
+**What Worked:**
+- Walking to bank (with gate opening)
+- Selling at general store (mechanics work)
+- Equipping gear
+- Screenshot capture via RunRecorder
+
+**What Didn't Work:**
+- General store prices too low for meaningful gold
+- Browser stability issues (page crashes during screenshot)
+- Pathfinding occasionally gets stuck
+
+### Victory Screenshot
+Saved to: `/Users/max/workplace/rs-agent/Server/bot_arcs/brad_1/victory.png`
+
+Shows Brad_1 at the cow field near Lumbridge with:
+- Bronze sword equipped
+- Wooden shield equipped
+- Combat stats visible in interface
+
+---
+
+## MISSION COMPLETE (2026-01-26 Early)
+
+Character Brad_1 completed final mission earlier. While gear upgrades weren't possible due to low general store prices, character has excellent combat stats.
+
+---
+
+## 2026-01-26 New Session: Money-Making Attempt (~07:17-08:30)
+
+### Goal: Make 200+ GP by skilling and selling
+
+### Run 1: Diagnostic Check
+**Duration**: ~30s
+**Results**:
+- Position: (3252, 3367)
+- Attack: 74, Strength: 78, Defence: 72, HP: 75
+- Total Level: 316
+- GP: 1
+- Equipment: Bronze sword + Wooden shield
+- Nearby: Trees, sheep, giant rats
+
+### Run 2: Combat-Grind (FULL 10 MIN SUCCESS!)
+**Duration**: 561 seconds
+**Results**:
+- Strength: 78 → 79 (+1 level!)
+- Hitpoints: 75 → 76 (+1 level!)
+- 83 kills
+- Total Level: 317 → 319 (+2)
+
+### Run 3-5: Cowhide Money Attempts
+**Goal**: Collect hides, sell at Lumbridge General Store
+
+**KEY DISCOVERY**: General stores pay **0 GP** for cowhides when overstocked!
+- First trip: Sold 20 hides → earned **0 GP**
+- Second trip: Sold 20 hides → earned **0 GP**
+- The store is completely overstocked and pays nothing
+
+### Run 6: Combat-Grind (FULL 10 MIN SUCCESS!)
+**Duration**: 602 seconds
+**Results**:
+- Attack: 75 → 76 (+1 level!)
+- 95 kills
+- Total Level: 320 → 321 (+1)
+
+### Run 7: Cowhide Money (10 min, browser crashed near end)
+**Duration**: ~601 seconds
+**Results**:
+- Sold 40 cowhides (2 trips) → **0 GP earned**
+- Defence: 72 → 73 (+1 level!)
+- 57 kills, 36 hides looted
+
+### Current Character Stats (End of Session)
+| Stat | Value | Change |
+|------|-------|--------|
+| Attack | 76 | +2 this session |
+| Strength | 79 | +1 this session |
+| Defence | 73 | +1 this session |
+| Hitpoints | 76 | +1 this session |
+| Total Level | 321 | +5 this session |
+| GP | 1 | **Unchanged** - stores pay 0 |
+
+### Session Score
+- **Start**: 316 (Total Level) + 1 GP = **317**
+- **End**: 321 (Total Level) + 1 GP = **322**
+- **Delta**: **+5**
+
+### Key Finding: General Stores Are Useless for Money!
+The general store at Lumbridge pays **0 GP** for cowhides when overstocked. This means:
+1. Collecting and selling cowhides at general stores = no money
+2. Need specialized shops (tanner, leather worker) for proper prices
+3. Or need different items that shops need (depleted stock)
+
+### Money-Making Blockers
+1. **General stores pay 0 GP** for cowhides when overstocked
+2. Browser crashes frequently (~every 2-10 minutes)
+3. Thieving script couldn't pickpocket successfully (option index issue)
+4. Mining script didn't reach mine (browser crashed)
+
+### What Worked
+- Combat training (consistent progress)
+- Gate opening and navigation
+- Selling mechanics (just terrible prices)
+- Full 10-minute runs when browser stable
+
+### Lessons Learned
+1. General stores have dynamic pricing - pay **0 GP** when overstocked
+2. Need to either:
+   - Find items stores need (low stock)
+   - Use specialized shops
+   - Try different money methods (mining, fishing)
+3. Combat training remains stable and effective
+
+### Session End State
+The browser became extremely unstable toward the end of the session, crashing within 10-30 seconds of each run. Despite this, significant progress was made:
+
+**Final Character Stats:**
+- Attack: 76
+- Strength: 79
+- Defence: 73
+- Hitpoints: 76
+- Total Level: 321
+- GP: 1 (unable to earn from general stores)
+
+**Total Session Progress:**
+- +5 Total Levels
+- +3 Combat stat levels (Attack +2, Strength +1, Defence +1, HP +1)
+- 200+ cows killed
+- 40+ hides sold (0 GP earned - stores overstocked)
+
+**Money-Making Conclusion:**
+The 200+ GP target was NOT achieved because:
+1. General stores pay 0 GP for cowhides when overstocked
+2. Need specialized shops or different items to earn gold
+3. Browser instability prevented sustained money-making attempts
