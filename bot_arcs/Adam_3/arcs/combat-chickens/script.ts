@@ -55,8 +55,8 @@ function getTotalLevel(ctx: ScriptContext): number {
 function isInCombat(ctx: ScriptContext): boolean {
     const state = ctx.state();
     if (!state) return false;
-    // Check if player is animating (in combat)
-    return state.player?.isAnimating ?? false;
+    // Check if player is animating (in combat) - animId !== -1 means active animation
+    return (state.player?.animId ?? -1) !== -1;
 }
 
 /**
@@ -86,8 +86,8 @@ async function buryBones(ctx: ScriptContext, stats: Stats): Promise<number> {
 
     for (const item of bones) {
         ctx.log(`Burying ${item.name}`);
-        // Use bone on itself (bury option is usually first)
-        await ctx.sdk.sendClickItem(item.slot, 0); // 0 = first option (Bury)
+        // Use bone (bury option is usually first - option index is 1-based)
+        await ctx.sdk.sendUseItem(item.slot, 1); // 1 = first option (Bury)
         buried++;
         markProgress(ctx, stats);
         await new Promise(r => setTimeout(r, 600));

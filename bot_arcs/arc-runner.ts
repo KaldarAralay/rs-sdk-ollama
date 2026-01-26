@@ -540,7 +540,7 @@ export function runArc(config: ArcConfig, arcFn: ArcFn): void {
             let stateReady = false;
             for (let i = 0; i < 60; i++) {  // Up to 30 seconds
                 const s = sdk.getState();
-                if (s?.player?.worldX > 0 && s?.player?.worldZ > 0) {
+                if ((s?.player?.worldX ?? 0) > 0 && (s?.player?.worldZ ?? 0) > 0) {
                     stateReady = true;
                     break;
                 }

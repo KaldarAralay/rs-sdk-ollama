@@ -74,6 +74,7 @@ async function walkWaypoints(
 
     for (let i = 0; i < waypoints.length; i++) {
         const wp = waypoints[i];
+        if (!wp) continue;
         console.log(`  Waypoint ${i + 1}/${waypoints.length}: (${wp.x}, ${wp.z})`);
 
         for (let attempt = 0; attempt < 5; attempt++) {

@@ -10,7 +10,7 @@
 
 import { runArc, StallError } from '../../../arc-runner';
 import type { ScriptContext } from '../../../arc-runner';
-import type { NearbyNpc } from '../../../../agent/types';
+import type { NearbyNpc, GroundItem } from '../../../../agent/types';
 
 // Lumbridge cow field (east of castle, open area)
 const COW_FIELD = { x: 3253, z: 3269 };
@@ -125,23 +125,16 @@ function findCow(ctx: ScriptContext): NearbyNpc | null {
 /**
  * Find ground items (cowhides, bones)
  */
-function findHide(ctx: ScriptContext): { id: number; x: number; z: number } | null {
+function findHide(ctx: ScriptContext): GroundItem | null {
     const state = ctx.state();
     if (!state) return null;
 
-    // Look for cowhides on the ground
+    // Look for cowhides on the ground (already sorted by distance)
     const hides = state.groundItems
         ?.filter(item => /cowhide|cow hide/i.test(item.name))
-        .sort((a, b) => {
-            const distA = Math.sqrt(Math.pow(a.x - state.player.worldX, 2) + Math.pow(a.z - state.player.worldZ, 2));
-            const distB = Math.sqrt(Math.pow(b.x - state.player.worldX, 2) + Math.pow(b.z - state.player.worldZ, 2));
-            return distA - distB;
-        });
+        .sort((a, b) => a.distance - b.distance);
 
-    if (hides && hides.length > 0) {
-        return { id: hides[0].id, x: hides[0].x, z: hides[0].z };
-    }
-    return null;
+    return hides?.[0] ?? null;
 }
 
 /**

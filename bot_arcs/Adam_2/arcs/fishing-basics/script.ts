@@ -61,7 +61,7 @@ function findFishingSpot(ctx: ScriptContext): NearbyNpc | null {
         .sort((a, b) => a.distance - b.distance);
 
     if (smallNetSpots.length > 0) {
-        return smallNetSpots[0];
+        return smallNetSpots[0] ?? null;
     }
 
     // Fallback to any fishing spot with Net option

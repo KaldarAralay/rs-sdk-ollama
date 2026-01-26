@@ -246,6 +246,7 @@ async function walkWithWaypoints(
 
     for (let i = 0; i < waypoints.length; i++) {
         const wp = waypoints[i];
+        if (!wp) continue;
         const state = ctx.state();
         const playerPos = state?.player ? `(${state.player.worldX}, ${state.player.worldZ})` : '?';
         log(`Walking to waypoint ${i + 1}/${waypoints.length}: (${wp.x}, ${wp.z}) from ${playerPos}`);

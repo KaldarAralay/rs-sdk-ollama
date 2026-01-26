@@ -191,10 +191,10 @@ async function buyNetFromShop(ctx: ScriptContext, stats: Stats): Promise<void> {
     // Check shop state
     const shopState = ctx.state()?.shop;
     if (shopState?.isOpen) {
-        ctx.log(`Shop is open with ${shopState.items.length} items`);
-        const netItem = shopState.items.find(i => /small fishing net/i.test(i.name));
+        ctx.log(`Shop is open with ${shopState.shopItems.length} items`);
+        const netItem = shopState.shopItems.find((i: { name: string }) => /small fishing net/i.test(i.name));
         if (netItem) {
-            ctx.log(`Found net: ${netItem.name} - ${netItem.price}gp`);
+            ctx.log(`Found net: ${netItem.name}`);
         }
     }
 

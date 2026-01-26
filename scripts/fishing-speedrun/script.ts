@@ -370,9 +370,10 @@ async function cookAllFish(ctx: ScriptContext, stats: Stats): Promise<void> {
             const state = ctx.state();
 
             // Handle cooking interface if it appears
-            if (state?.interface?.isOpen && state.interface.options.length > 0) {
+            const firstInterfaceOpt = state?.interface?.options[0];
+            if (state?.interface?.isOpen && firstInterfaceOpt) {
                 ctx.log('Clicking cook option...');
-                await ctx.sdk.sendClickInterface(state.interface.options[0].index);
+                await ctx.sdk.sendClickInterface(firstInterfaceOpt.index);
                 // After clicking, wait for batch cooking to complete
                 let noChange = 0;
                 while (noChange < 10 && countRawFish(ctx) > 0) {
@@ -514,10 +515,11 @@ async function waitForBankInterface(ctx: ScriptContext, stats: Stats): Promise<b
 
             // Look for bank-related option or just click first option
             const bankOption = options.find(o => /bank/i.test(o.text));
+            const firstOption = options[0];
             if (bankOption) {
                 await ctx.sdk.sendClickDialog(bankOption.index);
-            } else if (options.length > 0) {
-                await ctx.sdk.sendClickDialog(options[0].index);
+            } else if (firstOption) {
+                await ctx.sdk.sendClickDialog(firstOption.index);
             } else {
                 await ctx.sdk.sendClickDialog(0);
             }

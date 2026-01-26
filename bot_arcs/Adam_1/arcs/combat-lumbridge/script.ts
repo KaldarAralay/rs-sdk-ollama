@@ -241,7 +241,7 @@ async function combatLoop(ctx: ScriptContext, stats: Stats): Promise<void> {
         noTargetCount = 0;
 
         // Only attack if idle
-        const isIdle = player?.animId === -1 && !currentState.combat?.inCombat;
+        const isIdle = player?.animId === -1 && !currentState.player?.combat?.inCombat;
 
         if (isIdle) {
             const attackOpt = target.optionsWithIndex.find(o => /attack/i.test(o.text));

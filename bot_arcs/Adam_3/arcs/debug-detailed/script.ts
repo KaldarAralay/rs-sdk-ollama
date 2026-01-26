@@ -22,8 +22,8 @@ runArc({
     ctx.log(`\nPlayer:`);
     ctx.log(`  Position: (${state?.player?.worldX}, ${state?.player?.worldZ})`);
     ctx.log(`  Level: ${state?.player?.combatLevel}`);
-    ctx.log(`  isAnimating: ${state?.player?.isAnimating}`);
-    ctx.log(`  isDead: ${state?.player?.isDead}`);
+    ctx.log(`  animId: ${state?.player?.animId} (animating: ${(state?.player?.animId ?? -1) !== -1})`);
+    ctx.log(`  inCombat: ${state?.player?.combat?.inCombat}`);
 
     // Full skills list
     ctx.log(`\nAll Skills:`);
@@ -83,8 +83,8 @@ runArc({
             ctx.log(`  After 5s - HP: ${afterHP?.experience} xp`);
             ctx.log(`  XP change: ${(afterHP?.experience ?? 0) - (beforeHP?.experience ?? 0)}`);
 
-            const animState = ctx.state()?.player?.isAnimating;
-            ctx.log(`  isAnimating: ${animState}`);
+            const animId = ctx.state()?.player?.animId;
+            ctx.log(`  animId: ${animId} (animating: ${(animId ?? -1) !== -1})`);
 
             // Also try with opIndex 0 directly
             ctx.log(`\n  Trying opIndex=0 directly...`);

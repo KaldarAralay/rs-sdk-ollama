@@ -101,6 +101,7 @@ async function walkWaypoints(ctx: ScriptContext, waypoints: {x: number, z: numbe
 
     const player = ctx.state()?.player;
     const target = waypoints[waypoints.length - 1];
+    if (!target) return false;
     const finalDist = Math.sqrt(
         Math.pow((player?.worldX ?? 0) - target.x, 2) +
         Math.pow((player?.worldZ ?? 0) - target.z, 2)

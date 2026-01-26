@@ -93,21 +93,15 @@ function findBestCow(ctx: ScriptContext): NearbyNpc | null {
 async function pickupHides(ctx: ScriptContext, stats: Stats): Promise<number> {
     let pickedUp = 0;
     const state = ctx.state();
-    if (!state) return 0;
+    if (!state || !state.player) return 0;
 
     if (state.inventory.length >= 28) return 0;
 
+    // GroundItem already has distance property
     const groundItems = state.groundItems
         ?.filter(i => /cow\s*hide/i.test(i.name))
-        .sort((a, b) => {
-            const distA = Math.sqrt(Math.pow(a.x - state.player.worldX, 2) + Math.pow(a.z - state.player.worldZ, 2));
-            const distB = Math.sqrt(Math.pow(b.x - state.player.worldX, 2) + Math.pow(b.z - state.player.worldZ, 2));
-            return distA - distB;
-        })
-        .filter(i => {
-            const dist = Math.sqrt(Math.pow(i.x - state.player.worldX, 2) + Math.pow(i.z - state.player.worldZ, 2));
-            return dist <= 8;
-        }) ?? [];
+        .sort((a, b) => a.distance - b.distance)
+        .filter(i => i.distance <= 8) ?? [];
 
     for (const item of groundItems.slice(0, 3)) {
         if (ctx.state()!.inventory.length >= 28) break;

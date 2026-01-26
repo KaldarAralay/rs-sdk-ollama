@@ -139,7 +139,8 @@ async function cowLoop(ctx: ScriptContext, stats: Stats): Promise<void> {
             }
         }
     };
-    await setStyle(styleRotation[0]);
+    const firstStyle = styleRotation[0];
+    if (firstStyle) await setStyle(firstStyle);
 
     while (true) {
         loopCount++;
@@ -150,7 +151,8 @@ async function cowLoop(ctx: ScriptContext, stats: Stats): Promise<void> {
         // Rotate combat style every 100 loops
         if (loopCount % 100 === 0) {
             currentStyleIndex = (currentStyleIndex + 1) % styleRotation.length;
-            await setStyle(styleRotation[currentStyleIndex]);
+            const style = styleRotation[currentStyleIndex];
+            if (style) await setStyle(style);
         }
 
         const currentState = ctx.state();

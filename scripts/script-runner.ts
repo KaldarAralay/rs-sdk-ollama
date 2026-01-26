@@ -583,7 +583,7 @@ export function runScript(config: ScriptConfig, scriptFn: ScriptFn): void {
 
     execute()
         .then(outcome => {
-            console.log(`\nOutcome: ${outcome.toUpperCase()}`);
+            console.log(`\nOutcome: ${(outcome ?? 'error').toUpperCase()}`);
             process.exit(outcome === 'success' ? 0 : 1);
         })
         .catch(e => {

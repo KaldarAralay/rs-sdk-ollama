@@ -11,7 +11,8 @@
  * 5. Equip new gear
  */
 
-import { ScriptContext, runArc } from '../../../arc-runner';
+import { runArc } from '../../../arc-runner';
+import type { ScriptContext } from '../../../arc-runner';
 
 // === LOCATIONS ===
 const LOCATIONS = {
@@ -68,6 +69,7 @@ async function walkWaypoints(ctx: ScriptContext, waypoints: Array<{x: number, z:
     ctx.log(`Walking ${desc}...`);
     for (let i = 0; i < waypoints.length; i++) {
         const wp = waypoints[i];
+        if (!wp) continue;
         ctx.log(`  Waypoint ${i + 1}/${waypoints.length}: (${wp.x}, ${wp.z})`);
 
         for (let attempt = 0; attempt < 3; attempt++) {
@@ -201,12 +203,12 @@ async function buyFromShop(ctx: ScriptContext, stats: Stats, shopType: 'sword' |
     }
 
     ctx.log(`Shop: ${shopState.title || 'Unknown'}`);
-    ctx.log(`Items available: ${shopState.items?.length ?? 0}`);
+    ctx.log(`Items available: ${shopState.shopItems?.length ?? 0}`);
 
     // List shop items
-    const items = shopState.items ?? [];
+    const items = shopState.shopItems ?? [];
     for (const item of items.slice(0, 10)) {
-        ctx.log(`  ${item.name}: ${item.price} GP (stock: ${item.count})`);
+        ctx.log(`  ${item.name}: (stock: ${item.count})`);
     }
 
     // Buy strategy: buy the best item we can afford
@@ -229,11 +231,11 @@ async function buyFromShop(ctx: ScriptContext, stats: Stats, shopType: 'sword' |
         ];
     }
 
-    // Find best affordable item
+    // Find best available item in stock
     for (const targetName of targetItems) {
-        const item = items.find(i => i.name.toLowerCase().includes(targetName.toLowerCase()));
-        if (item && item.price <= gp && item.count > 0) {
-            ctx.log(`Buying: ${item.name} for ${item.price} GP`);
+        const item = items.find((i: { name: string }) => i.name.toLowerCase().includes(targetName.toLowerCase()));
+        if (item && item.count > 0) {
+            ctx.log(`Buying: ${item.name}`);
 
             // Buy item (slot, count)
             const itemSlot = items.indexOf(item);
@@ -242,7 +244,6 @@ async function buyFromShop(ctx: ScriptContext, stats: Stats, shopType: 'sword' |
             await new Promise(r => setTimeout(r, 500));
             markProgress(ctx);
 
-            stats.gpSpent += item.price;
             stats.itemsBought.push(item.name);
 
             ctx.log(`Bought ${item.name}!`);
@@ -275,7 +276,7 @@ async function equipGear(ctx: ScriptContext, stats: Stats): Promise<boolean> {
         // Find wield/wear option
         const wieldOpt = item.optionsWithIndex?.find(o => /wield|wear|equip/i.test(o.text));
         if (wieldOpt) {
-            await ctx.sdk.sendClickInventory(item.slot, wieldOpt.opIndex);
+            await ctx.sdk.sendUseItem(item.slot, wieldOpt.opIndex);
             await new Promise(r => setTimeout(r, 300));
             markProgress(ctx);
             ctx.log(`  Equipped ${item.name}!`);

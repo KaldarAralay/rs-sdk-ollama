@@ -151,11 +151,14 @@ runScript({
         }
 
         // Eat if HP is low (survive random events)
-        if (state.player.hp < state.player.maxHp - 3) {
+        const hpSkill = sdk.getSkill('Hitpoints');
+        const currentHp = hpSkill?.level ?? 10;
+        const maxHp = hpSkill?.baseLevel ?? 10;
+        if (currentHp < maxHp - 3) {
             const food = sdk.findInventoryItem(/bread|shrimp|fish/i);
             if (food) {
-                log(`HP low (${state.player.hp}/${state.player.maxHp}), eating ${food.name}...`);
-                await bot.eat(food);
+                log(`HP low (${currentHp}/${maxHp}), eating ${food.name}...`);
+                await bot.eatFood(food);
                 progress();
             }
         }
@@ -273,7 +276,7 @@ runScript({
             // Log saturation warning if GP per cycle is dropping significantly
             if (tracker.gpPerCycle.length >= 2) {
                 const lastCycleGP = tracker.gpPerCycle[tracker.gpPerCycle.length - 2];
-                if (cycleGP < lastCycleGP * 0.6) {
+                if (lastCycleGP !== undefined && cycleGP < lastCycleGP * 0.6) {
                     log(`⚠️ Shop saturation detected: GP dropped from ${lastCycleGP} to ${cycleGP}`);
                 }
             }

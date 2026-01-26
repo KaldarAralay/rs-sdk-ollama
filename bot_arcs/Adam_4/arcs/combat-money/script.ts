@@ -72,7 +72,8 @@ async function combatLoop(ctx: ScriptContext, stats: Stats): Promise<void> {
     };
 
     await new Promise(r => setTimeout(r, 300));
-    await setStyle(styleRotation[0]);
+    const firstStyle = styleRotation[0];
+    if (firstStyle) await setStyle(firstStyle);
 
     // Walk to goblin area (east of Lumbridge)
     const state0 = sdk.getState();
@@ -105,7 +106,8 @@ async function combatLoop(ctx: ScriptContext, stats: Stats): Promise<void> {
         // Rotate combat style every 50 turns
         if (turn % 50 === 0 && turn > 0) {
             currentStyleIndex = (currentStyleIndex + 1) % styleRotation.length;
-            await setStyle(styleRotation[currentStyleIndex]);
+            const style = styleRotation[currentStyleIndex];
+            if (style) await setStyle(style);
         }
 
         // Try to pick up ground loot first (use groundItems, not nearbyLocs!)

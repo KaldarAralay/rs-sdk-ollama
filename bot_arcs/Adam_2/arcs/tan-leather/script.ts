@@ -346,8 +346,9 @@ async function tanHides(ctx: ScriptContext, stats: Stats): Promise<boolean> {
 
     // Send tan all command - interface button click
     // The tanning interface has buttons for each leather type
-    // Clicking with quantity "All" typically requires right-click or specific button
-    await ctx.sdk.sendInterfaceButton(324, 9);  // Common tan interface
+    // Component ID = (interfaceId << 16) | buttonIndex
+    const componentId = (324 << 16) | 9;
+    await ctx.sdk.sendClickInterfaceComponent(componentId);  // Common tan interface
     await new Promise(r => setTimeout(r, 500));
     markProgress(ctx);
 

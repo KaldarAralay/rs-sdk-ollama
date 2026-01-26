@@ -348,7 +348,7 @@ async function cowhideLoop(ctx: ScriptContext, stats: Stats): Promise<void> {
         noCowCount = 0;
 
         // Attack cow if idle
-        const isIdle = player?.animId === -1 && !currentState.combat?.inCombat;
+        const isIdle = player?.animId === -1 && !currentState.player?.combat?.inCombat;
 
         if (isIdle) {
             const attackOpt = cow.optionsWithIndex.find(o => /attack/i.test(o.text));

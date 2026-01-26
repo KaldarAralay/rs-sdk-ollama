@@ -327,8 +327,9 @@ async function cookAllFish(ctx: ScriptContext, stats: Stats): Promise<void> {
 
             // Check for interface (cook menu)
             const iface = ctx.state()?.interface;
-            if (iface?.isOpen && iface.options.length > 0) {
-                await ctx.sdk.sendClickInterface(iface.options[0].index);
+            const firstOption = iface?.options[0];
+            if (iface?.isOpen && firstOption) {
+                await ctx.sdk.sendClickInterface(firstOption.index);
                 await new Promise(r => setTimeout(r, 500));
             }
 
