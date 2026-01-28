@@ -3190,6 +3190,18 @@ export class Client extends GameShell {
     private async login(username: string, password: string, reconnect: boolean): Promise<void> {
         try {
             if (!reconnect) {
+                if (username.length < 1 || username.length > 12) {
+                    this.loginMessage0 = '';
+                    this.loginMessage1 = 'Username must be 1-12 characters.';
+                    return;
+                }
+
+                if (password.length < 1 || password.length > 20) {
+                    this.loginMessage0 = '';
+                    this.loginMessage1 = 'Password must be 1-20 characters.';
+                    return;
+                }
+
                 this.loginMessage0 = '';
                 this.loginMessage1 = 'Connecting to server...';
                 await this.drawTitle();

@@ -681,7 +681,7 @@ async function tanHides(ctx: ScriptContext, stats: CraftingStats): Promise<void>
         }
 
         // If just "Click here to continue", click it
-        if (options.length === 1 && /continue/i.test(options[0].text)) {
+        if (options.length === 1 && /continue/i.test(options[0]!.text)) {
             await ctx.sdk.sendClickDialog(0);
             await new Promise(r => setTimeout(r, 300));
             continue;

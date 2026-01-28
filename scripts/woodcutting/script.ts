@@ -26,7 +26,7 @@ function getWoodcuttingLevel(ctx: ScriptContext): number {
 }
 
 function getWoodcuttingXp(ctx: ScriptContext): number {
-    return ctx.state()?.skills.find(s => s.name === 'Woodcutting')?.xp ?? 0;
+    return ctx.state()?.skills.find(s => s.name === 'Woodcutting')?.experience ?? 0;
 }
 
 function countLogs(ctx: ScriptContext): number {
@@ -122,7 +122,7 @@ async function buyAxeFromBob(ctx: ScriptContext): Promise<boolean> {
     log(`Shop open with ${shopState.shopItems.length} items`);
     const axes = shopState.shopItems.filter(i => /axe/i.test(i.name));
     for (const axe of axes) {
-        log(`  ${axe.name} - ${axe.price}gp (stock: ${axe.count})`);
+        log(`  ${axe.name} - ${axe.buyPrice}gp (stock: ${axe.count})`);
     }
 
     // Buy bronze axe

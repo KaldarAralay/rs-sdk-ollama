@@ -383,15 +383,25 @@ agent/
         ├── inventory.json
         └── world.md
 
-sdk/                          # Standalone SDK package (@rs-agent/sdk)
+sdk/                          # Standalone SDK package - SOURCE OF TRUTH
 ├── package.json              # npm package config
-├── index.ts                  # Main export (BotSDK)
-├── actions.ts                # BotActions export
-└── types.ts                  # Type definitions
+├── index.ts                  # BotSDK (plumbing layer)
+├── actions.ts                # BotActions (porcelain layer)
+├── types.ts                  # Type definitions
+└── README.md                 # Installation & usage docs
 
-scripts/                      # Example user scripts
-├── example-remote.ts         # Remote connection example
-└── ...
+agent/
+├── sdk.ts                    # Re-exports from sdk/
+├── bot-actions.ts            # Re-exports from sdk/
+├── gateway.ts                # Unified WebSocket router
+├── agent-service.ts          # Claude agent service
+├── cli.ts                    # CLI tool
+├── types.ts                  # Game protocol types
+├── run-recorder.ts           # Logging
+└── agent-state/              # Per-bot state files
+
+remote/                       # Example remote client scripts
+└── woodcutting.ts            # Remote woodcutting example
 
 test/
 ├── utils/

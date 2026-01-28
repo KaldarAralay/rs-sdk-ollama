@@ -315,6 +315,22 @@ export async function startWeb() {
         async fetch(req, server) {
             const url = new URL(req.url ?? `', 'http://${req.headers.get('host')}`);
 
+            // Gateway status endpoint (HTTP proxy)
+            if (url.pathname === '/gateway/status') {
+                try {
+                    const response = await fetch('http://localhost:7780/status');
+                    const data = await response.text();
+                    return new Response(data, {
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                } catch (_err) {
+                    return new Response(JSON.stringify({ error: 'Gateway not available' }), {
+                        status: 503,
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                }
+            }
+
             // Agent WebSocket proxy endpoint
             if (url.pathname === '/agent' || url.pathname === '/agent/') {
                 const upgradeHeader = req.headers.get('upgrade');
