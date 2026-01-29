@@ -8,9 +8,6 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "@2004scape/rsmod-pathfinder": "github:MaxBittker/rsmod-pathfinder#71a5588",
-    "@inquirer/prompts": "^7.5.3",
-    "playwright": "^1.57.0",
-    "puppeteer": "^24.35.0"
+    "@inquirer/prompts": "^7.5.3"
   }
 }
