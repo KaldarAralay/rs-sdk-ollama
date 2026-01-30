@@ -125,14 +125,21 @@ export class BotActions {
             return { success: false, message: 'Not in game' };
         }
 
-        // Check for character design modal (interface 269) and handle it
-        if (state.modalOpen && state.modalInterface === 269) {
-            await this.sdk.sendRandomizeCharacterDesign();
-            await new Promise(r => setTimeout(r, 100));
-            await this.sdk.sendAcceptCharacterDesign();
-            await new Promise(r => setTimeout(r, 300));
-            return { success: true, message: 'Character design randomized and accepted' };
-        }
+        // Helper to check and handle character design modal
+        const checkAndHandleDesignModal = async (): Promise<boolean> => {
+            const s = this.sdk.getState();
+            if (s?.modalOpen && s?.modalInterface === 3559) {
+                await this.sdk.sendRandomizeCharacterDesign();
+                await new Promise(r => setTimeout(r, 100));
+                await this.sdk.sendAcceptCharacterDesign();
+                await new Promise(r => setTimeout(r, 300));
+                return true;
+            }
+            return false;
+        };
+
+        // Check for character design modal (interface 3559) and handle it
+        await checkAndHandleDesignModal();
 
         // If dialog open, navigate through it (may take multiple clicks)
         if (state.dialog.isOpen) {
@@ -140,6 +147,9 @@ export class BotActions {
             const MAX_CLICKS = 10;
 
             while (clickCount < MAX_CLICKS) {
+                // Check for design modal each iteration
+                await checkAndHandleDesignModal();
+
                 const currentState = this.sdk.getState();
                 if (!currentState?.dialog.isOpen) {
                     return { success: true, message: `Dialog completed after ${clickCount} clicks` };
@@ -193,6 +203,9 @@ export class BotActions {
                 const MAX_CLICKS = 10;
 
                 while (clickCount < MAX_CLICKS) {
+                    // Check for design modal each iteration
+                    await checkAndHandleDesignModal();
+
                     const currentState = this.sdk.getState();
                     if (!currentState?.dialog.isOpen) {
                         return { success: true, message: `Tutorial skipped after ${clickCount} dialog clicks` };
