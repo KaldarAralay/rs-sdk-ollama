@@ -113,7 +113,9 @@ Rules:
 - Only ONE tool call per response.
 - Put all code on a single line. Use \\n for newlines within code strings.
 - The bot auto-connects on first execute_code call. No need to call connect().
-- After seeing the tool result, respond to the user OR make another tool call.`;
+- After seeing the tool result, respond to the user OR make another tool call.
+- Be concise. Don't show code blocks to the user — just make the tool call directly.
+- Double-check your brace count: every { needs a matching } in the code string.`;
 
   return `You are a game bot controller. You execute TypeScript code on game bots via tools.
 
@@ -127,34 +129,143 @@ IMPORTANT: bot and sdk are SEPARATE objects. Don't mix them up.
 - bot.chopTree() ✓   sdk.chopTree() ✗
 - sdk.sendDropItem() ✓   bot.sendDropItem() ✗
 
+CRITICAL LOOP RULES:
+1. ALWAYS add "await new Promise(r => setTimeout(r, 1000));" after EVERY action in a loop (success or failure)
+2. ALWAYS re-find NPCs/items each iteration — NEVER reuse references from a previous iteration (NPCs die, items get picked up)
+3. If an action fails, wait and continue to the next iteration — do NOT retry the same action immediately
+4. BRACE COUNTING: A while loop has exactly ONE closing }. Do NOT add extra braces. Count carefully: while (...) { ... } — that is ONE { and ONE }
+
 ## bot methods (high-level, await these):
-await bot.chopTree(target?) - Chop a tree. target is from sdk.findNearbyLoc(), NOT findNearbyNpc()!
-await bot.walkTo(x, z) - Walk to coordinates with pathfinding
-await bot.attackNpc(target) - Attack an NPC. target is from sdk.findNearbyNpc()
-await bot.talkTo(target) - Talk to an NPC. target is from sdk.findNearbyNpc()
-await bot.openBank() / bot.closeBank() / bot.depositItem(target, amount) / bot.withdrawItem(slot, amount)
-await bot.openShop(target) / bot.buyFromShop(target, amount) / bot.sellToShop(target, amount)
-await bot.equipItem(target) / bot.unequipItem(target) / bot.eatFood(target)
-await bot.pickupItem(target) - Pick up ground item
+// Movement
+await bot.walkTo(x, z, tolerance?) - Walk to coordinates with pathfinding, auto-opening doors
+await bot.waitForIdle(timeout?) - Wait for player to stop moving
+// Combat & Equipment
+await bot.attackNpc(target, timeout?) - Attack an NPC (ONLY sends Attack option). target from sdk.findNearbyNpc()
+await bot.castSpellOnNpc(target, spellComponent, timeout?) - Cast a combat spell on an NPC
+await bot.equipItem(target) - Equip an item. target is string or regex
+await bot.unequipItem(target) - Unequip an item to inventory
+await bot.findEquippedItem(pattern) - Find equipped item by name pattern
+await bot.eatFood(target) - Eat food to restore HP
+// Woodcutting, Firemaking, Crafting
+await bot.chopTree(target?) - Chop a tree. target from sdk.findNearbyLoc(), NOT findNearbyNpc()!
+await bot.burnLogs(target?) - Burn logs using tinderbox
+await bot.fletchLogs(product?) - Fletch logs into bows/arrows with knife
+await bot.smithAtAnvil(product, options?) - Smith bars at anvil
+await bot.craftLeather(product?) - Craft leather with needle and thread
+// Items
+await bot.pickupItem(target) - Pick up ground item. target from sdk.findGroundItem()
+await bot.useItemOnLoc(item, loc, options?) - Use inventory item on a location (cooking, smelting, etc.)
+// NPC Interaction
+await bot.talkTo(target) - Talk to NPC, wait for dialog. target from sdk.findNearbyNpc()
 await bot.openDoor(target?) - Open a door/gate
-await bot.fletchLogs(product?) / bot.burnLogs(target?) / bot.smithAtAnvil(product)
+// Shopping
+await bot.openShop(target) / bot.closeShop() / bot.buyFromShop(target, amount) / bot.sellToShop(target, amount)
+// Banking
+await bot.openBank() / bot.closeBank() / bot.depositItem(target, amount) / bot.withdrawItem(slot, amount)
+// UI & Dialog
 await bot.dismissBlockingUI() - ALWAYS call in loops to dismiss level-up dialogs
-await bot.waitForIdle()
+await bot.skipTutorial() - Skip the tutorial (call this if character is in tutorial area)
+await bot.waitForDialogClose(timeout?) - Wait for dialog to close
+// Condition Waiting
+await bot.waitForSkillLevel(skillName, targetLevel, timeout?) - Wait until a skill reaches target level
+await bot.waitForInventoryItem(pattern, timeout?) - Wait until item appears in inventory
 
 ## sdk methods (low-level):
-sdk.getState() - Returns full world state object
-sdk.getInventory() - Returns array of 28 slots, each null or {slot, id, name, amount}
-sdk.findInventoryItem(/pattern/i) - Returns ONE matching item {slot, id, name, amount} or null (NOT an array!)
+// State Access
+sdk.getState() - Returns full world state (see State Shape below)
+sdk.getInventory() - Returns array of 28 slots, each null or {slot, id, name, count, optionsWithIndex}
+sdk.findInventoryItem(/pattern/i) - Returns ONE matching item or null (NOT an array!)
+sdk.getInventoryItem(slot) - Get inventory item by slot number
 sdk.findNearbyLoc(/pattern/i) - Find a LOCATION (trees, rocks, banks, doors, anvils). Returns one or null
 sdk.findNearbyNpc(/pattern/i) - Find an NPC (goblins, shopkeepers, bankers). Returns one or null
+sdk.getNearbyNpc(index) - Get NPC by index number
+sdk.getNearbyLoc(x, z, id) - Get location by coordinates and ID
+sdk.findGroundItem(/pattern/i) - Find a ground item (bones, coins, drops). Returns one or null
+sdk.findEquipmentItem(/pattern/i) - Find equipped item by name pattern
+sdk.getEquipmentItem(slot) - Get equipment item by slot number
+sdk.findBankItem(/pattern/i) - Find bank item by name (bank must be open)
+sdk.getBankItem(slot) - Get bank item by slot (bank must be open)
+sdk.getSkill(name) - Returns {name, level, baseLevel, experience}. Use for health: sdk.getSkill('hitpoints').level
+sdk.getSkillXp(name) - Get XP for a skill
 IMPORTANT: Trees are LOCATIONS, not NPCs! Use findNearbyLoc for trees/rocks/objects.
-sdk.getSkill(name) / sdk.getSkillXp(name)
-await sdk.sendDropItem(slot) - Drop an inventory item by SLOT NUMBER
-await sdk.sendUseItem(slot, option) - Use an inventory item
-await sdk.sendWalk(x, z)
-await sdk.sendInteractNpc(index, option)
-await sdk.sendInteractLoc(x, z, id, option)
-await sdk.sendClickDialog(option)
+// On-Demand Scanning (extended radius search)
+await sdk.scanNearbyLocs(radius?) - Scan for locations with custom radius
+await sdk.scanGroundItems(radius?) - Scan for ground items
+await sdk.scanFindNearbyLoc(/pattern/i, radius?) - Find location with extended scan
+await sdk.scanFindGroundItem(/pattern/i, radius?) - Find ground item with extended scan
+// Raw Actions
+await sdk.sendWalk(x, z, running?) - Walk to coordinates
+await sdk.sendInteractNpc(index, option) - Interact with NPC by index and menu option
+await sdk.sendInteractLoc(x, z, locId, option) - Interact with a location
+await sdk.sendTalkToNpc(npcIndex) - Talk to NPC by index
+await sdk.sendPickup(x, z, itemId) - Pick up ground item by coords and ID
+await sdk.sendUseItem(slot, option) - Use inventory item. Find option from item.optionsWithIndex!
+await sdk.sendUseEquipmentItem(slot, option) - Use an equipped item (remove, operate)
+await sdk.sendDropItem(slot) - Drop inventory item by slot
+await sdk.sendUseItemOnItem(sourceSlot, targetSlot) - Use one item on another (e.g. knife on logs)
+await sdk.sendUseItemOnLoc(itemSlot, x, z, locId) - Use item on a location (e.g. ore on furnace)
+await sdk.sendClickDialog(option) - Click dialog option by index
+await sdk.sendClickComponent(componentId) - Click a UI component/button
+await sdk.sendClickComponentWithOption(componentId, optionIndex) - Click component with specific option
+await sdk.sendClickInterfaceOption(optionIndex) - Click interface option
+await sdk.sendShopBuy(slot, amount) / sdk.sendShopSell(slot, amount) - Buy/sell by slot
+await sdk.sendBankDeposit(slot, amount) / sdk.sendBankWithdraw(slot, amount) - Bank operations
+await sdk.sendSetCombatStyle(style) - Set combat style (0-3)
+await sdk.sendSpellOnNpc(npcIndex, spellComponent) - Cast spell on NPC
+await sdk.sendSpellOnItem(slot, spellComponent) - Cast spell on item
+await sdk.sendSay(message) - Send chat message
+await sdk.sendWait(ticks) - Wait for game ticks (~420ms each)
+await sdk.sendSetTab(tabIndex) - Switch UI tab
+await sdk.sendScreenshot(timeout?) - Request screenshot
+await sdk.sendFindPath(destX, destZ, maxWaypoints?) - Find path to destination
+// Waiting
+await sdk.waitForStateChange(timeout?) - Wait for next state update
+await sdk.waitForTicks(ticks) - Wait for specific number of server ticks
+
+## NPC menu options (Pickpocket, Talk-to, Attack, etc.)
+NPCs have an optionsWithIndex array listing all right-click options. Use this to pick actions other than Attack:
+const npc = sdk.findNearbyNpc(/^man$/i);
+const opt = npc.optionsWithIndex.find(o => /pickpocket/i.test(o.text));
+await sdk.sendInteractNpc(npc.index, opt.opIndex);
+IMPORTANT: bot.attackNpc() ONLY sends Attack. For Pickpocket or other options, use sdk.sendInteractNpc().
+
+## Inventory item options (Bury, Eat, Equip, Drop, etc.)
+Inventory items ALSO have optionsWithIndex, just like NPCs. NEVER hardcode slot numbers or option indexes!
+// Bury bones example:
+const bones = sdk.findInventoryItem(/bones/i);
+if (bones) {
+  const buryOpt = bones.optionsWithIndex.find(o => /bury/i.test(o.text));
+  if (buryOpt) await sdk.sendUseItem(bones.slot, buryOpt.opIndex);
+}
+// Eat food example:
+const food = sdk.findInventoryItem(/kebab|shrimp|bread/i);
+if (food) {
+  const eatOpt = food.optionsWithIndex.find(o => /eat/i.test(o.text));
+  if (eatOpt) await sdk.sendUseItem(food.slot, eatOpt.opIndex);
+}
+IMPORTANT: Always use findInventoryItem() to get the actual slot, and optionsWithIndex to get the right option!
+
+## State Shape (sdk.getState() returns):
+state.player.worldX, state.player.worldZ - Current position
+state.player.combat.inCombat - true if in combat
+state.player.combat.targetIndex - NPC index we're fighting (-1 if none)
+state.player.animId - Current animation (-1 = idle)
+state.skills[] - Array of {name, level, baseLevel, experience}
+state.inventory[] - Array of items with {slot, id, name, count, optionsWithIndex}
+state.equipment[] - Equipped items
+state.nearbyNpcs[] - NPCs with {index, name, optionsWithIndex, ...}
+state.nearbyLocs[] - Locations/objects
+state.groundItems[] - Items on the ground
+state.gameMessages[] - Recent game messages {text}
+state.dialog.isOpen - Whether a dialog is open
+state.shop.isOpen / state.bank.isOpen - Shop/bank open
+state.combatStyle - {currentStyle, weaponName, styles[]}
+
+## Health monitoring
+Check HP: sdk.getSkill('hitpoints') returns {level (current), baseLevel (max)}
+NOT sdk.getState().character.health — that does NOT exist!
+Check game messages: sdk.getState().gameMessages — array of {text} for stun/damage/success messages
+Check if in combat: sdk.getState().player.combat.inCombat (boolean)
 
 ## Common patterns:
 // Check state
@@ -176,6 +287,40 @@ while (Date.now() < end) {
   if (tree) await bot.chopTree(tree);
   const inv = sdk.getInventory();
   if (!inv.find(s => s === null)) { for (const it of inv) { if (it?.name?.match(/oak logs?/i)) await sdk.sendDropItem(it.slot); } }
+}
+
+// Pickpocketing loop with health monitoring and stun handling
+const end = Date.now() + 120000;
+while (Date.now() < end) {
+  await bot.dismissBlockingUI();
+  const hp = sdk.getSkill('hitpoints');
+  if (hp && hp.level <= 3) { console.log('HP low, waiting...'); await new Promise(r => setTimeout(r, 10000)); continue; }
+  const man = sdk.getState()?.nearbyNpcs.find(n => /^man$/i.test(n.name));
+  if (!man) { await bot.walkTo(3222, 3218); continue; }
+  const opt = man.optionsWithIndex.find(o => /pickpocket/i.test(o.text));
+  if (opt) { await sdk.sendInteractNpc(man.index, opt.opIndex); await new Promise(r => setTimeout(r, 1000)); }
+  const stunned = (sdk.getState()?.gameMessages ?? []).some(m => /stunned/i.test(m.text));
+  if (stunned) { await new Promise(r => setTimeout(r, 5000)); }
+}
+
+// Combat loop with looting and burying bones
+const end = Date.now() + 120000;
+while (Date.now() < end) {
+  await bot.dismissBlockingUI();
+  const hp = sdk.getSkill('hitpoints');
+  if (hp && hp.level <= 5) { console.log('HP low, waiting...'); await new Promise(r => setTimeout(r, 60000)); continue; }
+  // Loot ground items first (bones, coins)
+  const bones = sdk.findGroundItem(/bones/i);
+  if (bones) { await bot.pickupItem(bones); await new Promise(r => setTimeout(r, 1000)); continue; }
+  const coins = sdk.findGroundItem(/coins/i);
+  if (coins) { await bot.pickupItem(coins); await new Promise(r => setTimeout(r, 1000)); continue; }
+  // Bury any bones in inventory
+  const invBones = sdk.findInventoryItem(/bones/i);
+  if (invBones) { const opt = invBones.optionsWithIndex.find(o => /bury/i.test(o.text)); if (opt) await sdk.sendUseItem(invBones.slot, opt.opIndex); await new Promise(r => setTimeout(r, 1000)); continue; }
+  // Attack a goblin
+  const goblin = sdk.findNearbyNpc(/^goblin$/i);
+  if (goblin) { await bot.attackNpc(goblin); await new Promise(r => setTimeout(r, 1000)); }
+  await new Promise(r => setTimeout(r, 1000));
 }
 ${toolCallSection}`;
 }
@@ -254,7 +399,7 @@ async function callOllama(
 
 // ── Prompt-Based Tool Call Parsing ──────────────────────────────────────────
 
-function tryParseToolJson(jsonStr: string): ParsedToolCall | null {
+function tryParseAndValidate(jsonStr: string): ParsedToolCall | null {
   try {
     const parsed = JSON.parse(jsonStr);
     if (
@@ -270,6 +415,46 @@ function tryParseToolJson(jsonStr: string): ParsedToolCall | null {
   } catch {
     // not valid JSON
   }
+  return null;
+}
+
+function tryParseToolJson(jsonStr: string): ParsedToolCall | null {
+  // Try direct parse first
+  const direct = tryParseAndValidate(jsonStr);
+  if (direct) return direct;
+
+  // Repair: try adding 1-2 missing closing braces
+  for (const suffix of ['}', '}}']) {
+    const result = tryParseAndValidate(jsonStr + suffix);
+    if (result) return result;
+  }
+
+  // Repair: fix extra braces inside code strings
+  // Common pattern: code ends with }} instead of } making the JSON malformed
+  // Try to find the "code" value and remove trailing extra braces
+  const codeMatch = jsonStr.match(/"code"\s*:\s*"([\s\S]*)$/);
+  if (codeMatch) {
+    const afterCode = codeMatch[1];
+    // Try progressively removing trailing } from inside the code string
+    // Look for pattern: ...}}"}  or  ...}}"}} and fix brace count
+    for (let trim = 1; trim <= 3; trim++) {
+      // Find the last "} or "}} that could close the JSON
+      const fixRegex = new RegExp(`(\\}{${trim}})"(\\}*)\\s*$`);
+      const fixMatch = afterCode.match(fixRegex);
+      if (fixMatch) {
+        const codeEnd = afterCode.length - fixMatch[0].length;
+        const codeContent = afterCode.slice(0, codeEnd);
+        // Rebuild with fewer braces in code
+        for (let closingBraces = 1; closingBraces <= 3; closingBraces++) {
+          const fixed = jsonStr.slice(0, jsonStr.indexOf(afterCode)) +
+            codeContent + '"' + '}'.repeat(closingBraces);
+          const result = tryParseAndValidate(fixed);
+          if (result) return result;
+        }
+      }
+    }
+  }
+
   return null;
 }
 
@@ -373,6 +558,17 @@ async function executeTool(
   name: string,
   args: Record<string, unknown>
 ): Promise<string> {
+  // Pre-validate code syntax for execute_code to give faster, clearer errors
+  if (name === 'execute_code' && typeof args.code === 'string') {
+    try {
+      // Must use AsyncFunction since the code uses top-level await
+      const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+      new AsyncFunction('bot', 'sdk', args.code);
+    } catch (syntaxErr: any) {
+      return `Syntax error in code: ${syntaxErr.message}\nFix the code and try again. Common issue: extra or missing closing braces.`;
+    }
+  }
+
   try {
     const result = await client.callTool(
       { name, arguments: args },
