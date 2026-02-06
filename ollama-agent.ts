@@ -113,7 +113,9 @@ Rules:
 - Only ONE tool call per response.
 - Put all code on a single line. Use \\n for newlines within code strings.
 - The bot auto-connects on first execute_code call. No need to call connect().
-- After seeing the tool result, respond to the user OR make another tool call.`;
+- After seeing the tool result, respond to the user OR make another tool call.
+- Be concise. Don't show code blocks to the user — just make the tool call directly.
+- Double-check your brace count: every { needs a matching } in the code string.`;
 
   return `You are a game bot controller. You execute TypeScript code on game bots via tools.
 
@@ -148,13 +150,26 @@ sdk.findInventoryItem(/pattern/i) - Returns ONE matching item {slot, id, name, a
 sdk.findNearbyLoc(/pattern/i) - Find a LOCATION (trees, rocks, banks, doors, anvils). Returns one or null
 sdk.findNearbyNpc(/pattern/i) - Find an NPC (goblins, shopkeepers, bankers). Returns one or null
 IMPORTANT: Trees are LOCATIONS, not NPCs! Use findNearbyLoc for trees/rocks/objects.
-sdk.getSkill(name) / sdk.getSkillXp(name)
+sdk.getSkill(name) - Returns {name, level, baseLevel, experience}. Use for health: sdk.getSkill('hitpoints').level
+sdk.getSkillXp(name)
 await sdk.sendDropItem(slot) - Drop an inventory item by SLOT NUMBER
 await sdk.sendUseItem(slot, option) - Use an inventory item
 await sdk.sendWalk(x, z)
-await sdk.sendInteractNpc(index, option)
+await sdk.sendInteractNpc(index, option) - Interact with NPC using a specific menu option (e.g. Pickpocket, Attack, Talk-to)
 await sdk.sendInteractLoc(x, z, id, option)
 await sdk.sendClickDialog(option)
+
+## NPC menu options (Pickpocket, Talk-to, Attack, etc.)
+NPCs have an optionsWithIndex array listing all right-click options. Use this to pick actions other than Attack:
+const npc = sdk.findNearbyNpc(/^man$/i);
+const opt = npc.optionsWithIndex.find(o => /pickpocket/i.test(o.text));
+await sdk.sendInteractNpc(npc.index, opt.opIndex);
+IMPORTANT: bot.attackNpc() ONLY sends Attack. For Pickpocket or other options, use sdk.sendInteractNpc().
+
+## Health monitoring
+Check HP: sdk.getSkill('hitpoints') returns {level (current), baseLevel (max)}
+NOT sdk.getState().character.health — that does NOT exist!
+Check game messages: sdk.getState().gameMessages — array of {text} for stun/damage/success messages
 
 ## Common patterns:
 // Check state
@@ -176,6 +191,20 @@ while (Date.now() < end) {
   if (tree) await bot.chopTree(tree);
   const inv = sdk.getInventory();
   if (!inv.find(s => s === null)) { for (const it of inv) { if (it?.name?.match(/oak logs?/i)) await sdk.sendDropItem(it.slot); } }
+}
+
+// Pickpocketing loop with health monitoring and stun handling
+const end = Date.now() + 120000;
+while (Date.now() < end) {
+  await bot.dismissBlockingUI();
+  const hp = sdk.getSkill('hitpoints');
+  if (hp && hp.level <= 3) { console.log('HP low, waiting...'); await new Promise(r => setTimeout(r, 10000)); continue; }
+  const man = sdk.getState()?.nearbyNpcs.find(n => /^man$/i.test(n.name));
+  if (!man) { await bot.walkTo(3222, 3218); continue; }
+  const opt = man.optionsWithIndex.find(o => /pickpocket/i.test(o.text));
+  if (opt) { await sdk.sendInteractNpc(man.index, opt.opIndex); await new Promise(r => setTimeout(r, 1000)); }
+  const stunned = (sdk.getState()?.gameMessages ?? []).some(m => /stunned/i.test(m.text));
+  if (stunned) { await new Promise(r => setTimeout(r, 5000)); }
 }
 ${toolCallSection}`;
 }
@@ -373,6 +402,17 @@ async function executeTool(
   name: string,
   args: Record<string, unknown>
 ): Promise<string> {
+  // Pre-validate code syntax for execute_code to give faster, clearer errors
+  if (name === 'execute_code' && typeof args.code === 'string') {
+    try {
+      // Must use AsyncFunction since the code uses top-level await
+      const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+      new AsyncFunction('bot', 'sdk', args.code);
+    } catch (syntaxErr: any) {
+      return `Syntax error in code: ${syntaxErr.message}\nFix the code and try again. Common issue: extra or missing closing braces.`;
+    }
+  }
+
   try {
     const result = await client.callTool(
       { name, arguments: args },
