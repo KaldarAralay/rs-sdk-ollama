@@ -1,0 +1,11 @@
+{
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "rs-agent"
+  ],
+  "permissions": {
+    "allow": [
+      "mcp__rs-agent__execute_code"
+    ]
+  }
+}
